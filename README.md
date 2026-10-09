@@ -92,13 +92,7 @@ Each track card has visibility, colour, order (drag the `⠿` handle or use ↑/
 
 ## Development
 
-```
-npm install     # once, dev dependencies only
-npm test        # unit tests: signal maths, circular and linear geometry, parsers
-npm run vendor  # re-bundle @gmod/bbi into vendor/bbi.bundle.js
-```
-
-There is no build step; the app is plain ES modules in `src/`.
+Tests, specs and build scripts live on the [`dev` branch](../../tree/dev).
 
 ## Feedback
 
