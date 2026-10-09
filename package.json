@@ -1,0 +1,17 @@
+{
+  "name": "orbit-track",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 scripts/serve.py 8765",
+    "test": "node --test test/",
+    "vendor": "node scripts/build-vendor.js"
+  },
+  "devDependencies": {
+    "@gmod/bbi": "^3.0.1",
+    "generic-filehandle": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "esbuild-plugin-polyfill-node": "^0.3.0"
+  }
+}
