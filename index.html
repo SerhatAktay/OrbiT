@@ -46,6 +46,9 @@
     #help { position: absolute; inset: 0; margin: auto; width: 400px; max-width: 90%; height: fit-content; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; z-index: 6; line-height: 1.9; }
     #help[hidden] { display: none; }
     #help h2 { margin: 0 0 6px; font-size: 14px; }
+    #pick-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; max-width: 90%; }
+    #pick-dialog[open] { display: flex; flex-direction: column; gap: 6px; }
+    #pick-dialog button { text-align: left; }
     kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 11px; }
   </style>
 </head>
@@ -54,6 +57,7 @@
     <h1>OrbiT</h1>
     <button id="open-files">Open files…</button>
     <input id="file-input" type="file" multiple hidden accept=".bw,.bigwig,.bed,.gtf,.gff,.gff3,.gb,.gbk,.gbff,.genbank" />
+    <button id="fetch-annotation" title="Download a GenBank annotation from NCBI by accession or name">Fetch annotation…</button>
     <select id="chrom" title="Chromosome" hidden></select>
     <span class="spacer"></span>
     <button id="mode-btn" title="Switch between circular and linear view (V)">Linear view</button>
@@ -105,5 +109,6 @@
     </aside>
   </main>
   <script type="module" src="src/app.js"></script>
+  <dialog id="pick-dialog"></dialog>
 </body>
 </html>

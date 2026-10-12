@@ -22,7 +22,7 @@ import {
 } from './tracks.js'
 import { openBigWig, getBinnedValues } from './parse-bigwig.js'
 import { transformBins } from './signal.js'
-import { parseAnnotation, normChrom, compareChroms } from './parse-annotation.js'
+import { parseAnnotation, parseGenBank, normChrom, compareChroms } from './parse-annotation.js'
 import { drawScene, fmtVal } from './draw.js'
 import { drawLinear, LEFT } from './draw-linear.js'
 import { TAU } from './render.js'
@@ -263,6 +263,54 @@ async function handleFiles(files) {
   requestRender()
 }
 
+// Fetch a GenBank record from NCBI: an accession (NC_012920.1) loads directly;
+// anything else is a search and the top RefSeq genomes are offered in a picker.
+const EUTILS = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
+const ncbi = async (path) => {
+  const res = await fetch(`${EUTILS}/${path}`)
+  if (!res.ok) throw new Error(`NCBI returned ${res.status}`)
+  return res
+}
+
+function pickRecord(hits) {
+  const dlg = $('pick-dialog')
+  dlg.replaceChildren(...hits.map((h) => Object.assign(document.createElement('button'), {
+    textContent: `${h.caption} · ${h.title} · ${h.slen.toLocaleString('en-US')} bp`,
+    onclick: () => dlg.close(h.caption),
+  })), Object.assign(document.createElement('button'), { textContent: 'Cancel', onclick: () => dlg.close('') }))
+  return new Promise((resolve) => {
+    dlg.onclose = () => resolve(dlg.returnValue)
+    dlg.returnValue = ''
+    dlg.showModal()
+  })
+}
+
+async function fetchAnnotation() {
+  const q = prompt('NCBI accession (e.g. NC_012920.1) or search (e.g. Mus musculus mitochondrion):')?.trim()
+  if (!q) return
+  try {
+    let id = q
+    if (!/^[A-Z]{1,2}_?\d+(\.\d+)?$/i.test(q)) {
+      const term = `${encodeURIComponent(q)}+AND+srcdb_refseq[prop]+AND+biomol_genomic[prop]+AND+complete+genome[title]`
+      const ids = (await (await ncbi(`esearch.fcgi?db=nuccore&retmode=json&retmax=10&term=${term}`)).json()).esearchresult?.idlist ?? []
+      if (!ids.length) throw new Error(`no RefSeq genome found for "${q}"`)
+      const sum = (await (await ncbi(`esummary.fcgi?db=nuccore&retmode=json&id=${ids.join(',')}`)).json()).result
+      id = await pickRecord(ids.map((i) => sum[i]))
+      if (!id) return
+    }
+    const text = await (await ncbi(`efetch.fcgi?db=nuccore&id=${encodeURIComponent(id)}&rettype=gb&retmode=text`)).text()
+    const features = parseGenBank(text)
+    if (!features.length) throw new Error('no features found')
+    addAnnotationTrack(`${features[0].chrom}.gb`, features)
+    showError(`Loaded ${text.match(/^DEFINITION\s+(.*)$/m)?.[1] ?? features[0].chrom}`)
+    updateChromList()
+    rebuildPanel()
+    requestRender()
+  } catch (err) {
+    showError(`Couldn't fetch annotation: ${err.message}`)
+  }
+}
+
 // A loaded session waits here until its tracks' files are opened.
 let pendingSession = null
 function applyPendingSession() {
@@ -450,6 +498,7 @@ canvasArea.addEventListener('drop', (e) => {
 })
 $('open-files').addEventListener('click', () => $('file-input').click())
 $('file-input').addEventListener('change', (e) => { handleFiles([...e.target.files]); e.target.value = '' })
+$('fetch-annotation').addEventListener('click', fetchAnnotation)
 $('save-session').addEventListener('click', () => genome && saveSession())
 $('load-session').addEventListener('click', () => $('session-input').click())
 $('session-input').addEventListener('change', (e) => { if (e.target.files[0]) loadSessionFile(e.target.files[0]); e.target.value = '' })
