@@ -22,7 +22,7 @@ import {
 } from './tracks.js'
 import { openBigWig, getBinnedValues } from './parse-bigwig.js'
 import { transformBins } from './signal.js'
-import { parseAnnotation, parseGenBank, normChrom, compareChroms } from './parse-annotation.js'
+import { parseAnnotation, parseGenBank, parseGtfLines, normChrom, compareChroms } from './parse-annotation.js'
 import { drawScene, fmtVal } from './draw.js'
 import { drawLinear, LEFT } from './draw-linear.js'
 import { TAU } from './render.js'
@@ -78,13 +78,14 @@ function resolveChrom(chromSizes, name) {
 }
 
 const annotationCache = new WeakMap() // track -> { chrom, track }
-// Keep features on the displayed chromosome. Files using other chrom names
-// (none match) show everything rather than nothing.
+// Keep features on the displayed chromosome. A single-record file whose name
+// matches nothing (GenBank NC_012920 over a chrM bigWig) shows everything; a
+// multi-chromosome annotation without this chromosome (hs1 has no chrM) shows nothing.
 function annotationForChrom(track) {
   const hit = annotationCache.get(track)
   if (hit && hit.chrom === genome.name) return hit.track
   const mine = track.features.filter((f) => normChrom(f.chrom) === normChrom(genome.name))
-  const features = mine.length ? mine : track.features
+  const features = mine.length || new Set(track.features.map((f) => f.chrom)).size > 1 ? mine : track.features
   const { lanes, laneCount } = packLanes(features)
   const out = { ...track, laneCount, features: features.map((f, i) => ({ ...f, lane: lanes[i] })) }
   annotationCache.set(track, { chrom: genome.name, track: out })
@@ -94,6 +95,11 @@ function annotationForChrom(track) {
 function updateChromList() {
   const names = new Set()
   for (const h of bigWigHandles.values()) for (const c of Object.keys(h.chromSizes)) names.add(c)
+  // Annotation chromosomes too (hg38 has hundreds of scaffolds: then keep only ones with >= 10 genes).
+  const counts = new Map()
+  for (const t of trackList) if (t.type === 'annotation') for (const f of t.features) counts.set(f.chrom, (counts.get(f.chrom) ?? 0) + 1)
+  const known = new Set([...names].map(normChrom))
+  for (const [c, n] of counts) if (!known.has(normChrom(c)) && (counts.size <= 30 || n >= 10)) { names.add(c); known.add(normChrom(c)) }
   chromSelect.replaceChildren(...[...names].sort(compareChroms).map((c) => Object.assign(document.createElement('option'), { value: c, textContent: c })))
   chromSelect.hidden = names.size < 2
   if (genome && names.has(genome.name)) chromSelect.value = genome.name
@@ -195,8 +201,9 @@ function addAnnotationTrack(name, features) {
   const count = trackList.filter((t) => t.type === 'annotation').length
   trackList = addTrack(trackList, createAnnotationTrack({ name, features, color: ANNOTATION_COLORS[count % ANNOTATION_COLORS.length] }))
   if (!genome) {
-    const len = Math.max(...features.map((f) => Math.max(f.start, f.end, f.chromLength ?? 0)), 1)
-    genome = resetView(createGenome(len, features[0]?.chrom ?? 'genome'))
+    const first = [...new Set(features.map((f) => f.chrom))].sort(compareChroms)[0] ?? 'genome'
+    const len = features.reduce((m, f) => (normChrom(f.chrom) === normChrom(first) ? Math.max(m, f.start, f.end, f.chromLength ?? 0) : m), 1)
+    genome = resetView(createGenome(len, first))
     genomeDerived = true
   }
 }
@@ -285,13 +292,71 @@ function pickRecord(hits) {
   })
 }
 
+// Whole-genome annotations by assembly name (same sources as proBrow).
+const ENS = 'https://ftp.ensembl.org/pub'
+const GENOMES = {
+  hg38: ['Human GRCh38 (Ensembl 113)', `${ENS}/release-113/gtf/homo_sapiens/Homo_sapiens.GRCh38.113.gtf.gz`],
+  hg19: ['Human GRCh37 (Ensembl 87)', `${ENS}/grch37/release-87/gtf/homo_sapiens/Homo_sapiens.GRCh37.87.gtf.gz`],
+  hs1: ['Human T2T CHM13v2 (UCSC ncbiRefSeq)', 'https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/genes/hs1.ncbiRefSeq.gtf.gz'],
+  mm39: ['Mouse GRCm39 (Ensembl 113)', `${ENS}/release-113/gtf/mus_musculus/Mus_musculus.GRCm39.113.gtf.gz`],
+  mm10: ['Mouse GRCm38 (Ensembl 102)', `${ENS}/release-102/gtf/mus_musculus/Mus_musculus.GRCm38.102.gtf.gz`],
+  dm6: ['Drosophila BDGP6 (Ensembl 113)', `${ENS}/release-113/gtf/drosophila_melanogaster/Drosophila_melanogaster.BDGP6.46.113.gtf.gz`],
+  ce11: ['C. elegans WBcel235 (Ensembl 113)', `${ENS}/release-113/gtf/caenorhabditis_elegans/Caenorhabditis_elegans.WBcel235.113.gtf.gz`],
+  danrer11: ['Zebrafish GRCz11 (Ensembl 113)', `${ENS}/release-113/gtf/danio_rerio/Danio_rerio.GRCz11.113.gtf.gz`],
+  sacCer3: ['S. cerevisiae R64-1-1 (Ensembl 113)', `${ENS}/release-113/gtf/saccharomyces_cerevisiae/Saccharomyces_cerevisiae.R64-1-1.113.gtf.gz`],
+}
+GENOMES.saccer3 = GENOMES.sacCer3
+
+// Download (cached in the browser after the first time), gunzip and parse a GTF.
+async function loadGenome(label, url) {
+  const cache = await globalThis.caches?.open('orbit-annotations').catch(() => null)
+  let res = await cache?.match(url)
+  if (!res) {
+    res = await fetch(url)
+    if (!res.ok) throw new Error(`download failed (${res.status})`)
+    cache?.put(url, res.clone()).catch(() => {}) // best effort; next load skips the download
+  }
+  const total = Number(res.headers.get('content-length')) || 0
+  let got = 0
+  const text = res.body
+    .pipeThrough(new TransformStream({ transform(chunk, ctl) { got += chunk.length; ctl.enqueue(chunk) } }))
+    .pipeThrough(new DecompressionStream('gzip'))
+    .pipeThrough(new TextDecoderStream())
+  async function* lines() {
+    let tail = ''
+    for await (const chunk of text) {
+      const parts = (tail + chunk).split('\n')
+      tail = parts.pop()
+      showError(`Reading ${label}… ${(got / 1e6).toFixed(0)}${total ? ` / ${(total / 1e6).toFixed(0)}` : ''} MB`)
+      yield* parts
+    }
+    if (tail) yield tail
+  }
+  const features = await parseGtfLines(lines())
+  if (!features.length) throw new Error('no genes found')
+  return features
+}
+
 async function fetchAnnotation() {
-  const q = prompt('NCBI accession (e.g. NC_012920.1) or search (e.g. Mus musculus mitochondrion):')?.trim()
+  const q = prompt('Assembly (hg38, hg19, hs1, mm39, mm10, dm6, ce11, danRer11, sacCer3), accession (NC_012920.1) or species (Homo sapiens):')?.trim()
   if (!q) return
   try {
+    const genomeEntry = GENOMES[q] ?? GENOMES[q.toLowerCase()]
+    if (genomeEntry) {
+      const [label, url] = genomeEntry
+      showError(`Downloading ${label}…`)
+      addAnnotationTrack(`${q}.gtf`, await loadGenome(label, url))
+      showError(`Loaded ${label}`)
+      updateChromList()
+      rebuildPanel()
+      requestRender()
+      return
+    }
     let id = q
-    if (!/^[A-Z]{1,2}_?\d+(\.\d+)?$/i.test(q)) {
-      const term = `${encodeURIComponent(q)}+AND+srcdb_refseq[prop]+AND+biomol_genomic[prop]+AND+complete+genome[title]`
+    if (!/^[A-Z]{1,2}_?\d+(\.\d+)?$/i.test(id)) {
+      // Every word must appear in the record title, so "homo sapiens" finds the human genome, not hosts' bacteria.
+      const words = q.split(/\s+/).map((w) => `${encodeURIComponent(w)}[title]`).join('+AND+')
+      const term = `${words}+AND+srcdb_refseq[prop]+AND+biomol_genomic[prop]+AND+complete+genome[title]`
       const ids = (await (await ncbi(`esearch.fcgi?db=nuccore&retmode=json&retmax=10&term=${term}`)).json()).esearchresult?.idlist ?? []
       if (!ids.length) throw new Error(`no RefSeq genome found for "${q}"`)
       const sum = (await (await ncbi(`esummary.fcgi?db=nuccore&retmode=json&id=${ids.join(',')}`)).json()).result
@@ -486,6 +551,44 @@ function onSvgClick(event) {
   const { feature } = describe(loc)
   if (feature) { genome = zoomToRange(genome, feature.start, feature.end); requestRender() }
 }
+
+// ---- search ----------------------------------------------------------------
+
+const searchBox = $('search')
+const searchList = $('search-list')
+function searchFeatures(q) {
+  q = q.toLowerCase()
+  const hits = []
+  for (const t of trackList) if (t.type === 'annotation') for (const f of t.features) {
+    const n = f.name.toLowerCase()
+    if (n.startsWith(q)) hits.push([0, f])
+    else if (n.includes(q)) hits.push([1, f])
+  }
+  return hits.sort((a, b) => a[0] - b[0] || a[1].name.length - b[1].name.length).slice(0, 20).map((h) => h[1])
+}
+
+function goToFeature(f) {
+  const chrom = [...chromSelect.options].find((o) => normChrom(o.value) === normChrom(f.chrom))?.value ?? f.chrom
+  if (!genome || genome.name !== chrom) {
+    genome = resetView(createGenome(chromLengthFor(chrom) || f.chromLength || Math.max(f.start, f.end), chrom))
+    chromSelect.value = chrom
+  }
+  genome = zoomToRange(genome, f.start, f.end)
+  requestRender()
+}
+
+searchBox.addEventListener('input', () => {
+  searchList.replaceChildren(...(searchBox.value.length < 2 ? [] : searchFeatures(searchBox.value)).map((f) =>
+    Object.assign(document.createElement('option'), { value: f.name, label: `${f.chrom}:${(f.start + 1).toLocaleString('en-US')}-${f.end.toLocaleString('en-US')}` })))
+})
+searchBox.addEventListener('change', () => {
+  const q = searchBox.value.trim().toLowerCase()
+  const f = q && (searchFeatures(q).find((x) => x.name.toLowerCase() === q) ?? searchFeatures(q)[0])
+  if (f) { goToFeature(f); searchBox.blur() } else if (q) showError(`No feature matches "${searchBox.value}".`)
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && !e.metaKey && !e.ctrlKey) { e.preventDefault(); searchBox.focus() }
+})
 
 // ---- wiring ----------------------------------------------------------------
 

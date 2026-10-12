@@ -44,6 +44,30 @@ function attrValue(attributes, key) {
   }
 }
 
+function gtfRow(line) {
+  const fields = line.split('\t')
+  if (fields.length < 9) {
+    throw new Error(`Invalid GTF line (need 9 fields): "${line}"`)
+  }
+  const [chrom, , type, startStr, endStr, , strand, , attributes] = fields
+  const start = Number(startStr) - 1
+  const end = Number(endStr)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    throw new Error(`Invalid GTF coordinates: "${line}"`)
+  }
+  const key = ATTR_KEYS.find((k) => attrValue(attributes, k))
+  return {
+    chrom,
+    name: key ? attrValue(attributes, key) : `feature_${start}_${end}`,
+    start,
+    end,
+    strand: strandOf(strand),
+    type,
+  }
+}
+
+const SKIP_TYPES = ['region', 'chromosome', 'source', 'supercontig']
+
 // GTF and GFF3 (same 9 columns). Files repeat a gene as gene/transcript/exon/CDS;
 // when genes are present keep only those so each gene draws once.
 export function parseGtf(text) {
@@ -51,29 +75,34 @@ export function parseGtf(text) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('#'))
-    .map((line) => {
-      const fields = line.split('\t')
-      if (fields.length < 9) {
-        throw new Error(`Invalid GTF line (need 9 fields): "${line}"`)
-      }
-      const [chrom, , type, startStr, endStr, , strand, , attributes] = fields
-      const start = Number(startStr) - 1
-      const end = Number(endStr)
-      if (!Number.isFinite(start) || !Number.isFinite(end)) {
-        throw new Error(`Invalid GTF coordinates: "${line}"`)
-      }
-      const key = ATTR_KEYS.find((k) => attrValue(attributes, k))
-      return {
-        chrom,
-        name: key ? attrValue(attributes, key) : `feature_${start}_${end}`,
-        start,
-        end,
-        strand: strandOf(strand),
-        type,
-      }
-    })
-    .filter((f) => !['region', 'chromosome', 'source', 'supercontig'].includes(f.type))
+    .map(gtfRow)
+    .filter((f) => !SKIP_TYPES.includes(f.type))
   return rows.some((f) => f.type === 'gene') ? rows.filter((f) => f.type === 'gene') : rows
+}
+
+// Whole-genome GTF from an async iterable of lines (a 1.5M-line file never sits
+// in memory as one string). Keeps gene rows; files without them (UCSC) get one
+// feature per gene_id spanning its transcripts.
+export async function parseGtfLines(lines) {
+  const genes = []
+  const merged = new Map()
+  for await (const line of lines) {
+    if (!line || line[0] === '#') continue
+    const type = line.split('\t', 3)[2]
+    if (type !== 'gene' && type !== 'transcript') continue
+    const row = gtfRow(line)
+    if (type === 'gene') {
+      genes.push(row)
+      continue
+    }
+    const id = `${row.chrom}\t${attrValue(line.split('\t')[8], 'gene_id') ?? row.name}`
+    const m = merged.get(id)
+    if (m) {
+      m.start = Math.min(m.start, row.start)
+      m.end = Math.max(m.end, row.end)
+    } else merged.set(id, { ...row, type: 'gene' })
+  }
+  return genes.length ? genes : [...merged.values()]
 }
 
 // GenBank flat file. Locations: a..b, complement(...), join(a..b,c..d). A join

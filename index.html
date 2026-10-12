@@ -49,6 +49,7 @@
     #pick-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; max-width: 90%; }
     #pick-dialog[open] { display: flex; flex-direction: column; gap: 6px; }
     #pick-dialog button { text-align: left; }
+    #search { width: 170px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; }
     kbd { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; font-size: 11px; }
   </style>
 </head>
@@ -58,6 +59,8 @@
     <button id="open-files">Open files…</button>
     <input id="file-input" type="file" multiple hidden accept=".bw,.bigwig,.bed,.gtf,.gff,.gff3,.gb,.gbk,.gbff,.genbank" />
     <button id="fetch-annotation" title="Download a GenBank annotation from NCBI by accession or name">Fetch annotation…</button>
+    <input id="search" list="search-list" type="search" placeholder="Search feature (/)" title="Find a gene or feature by name (/)" autocomplete="off" />
+    <datalist id="search-list"></datalist>
     <select id="chrom" title="Chromosome" hidden></select>
     <span class="spacer"></span>
     <button id="mode-btn" title="Switch between circular and linear view (V)">Linear view</button>
@@ -82,7 +85,7 @@
         scroll: zoom at cursor · drag: rotate<br />
         double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it<br />
         <b>Keyboard</b><br />
-        <kbd>R</kbd> reset view · <kbd>V</kbd> circular / linear · <kbd>?</kbd> this panel · <kbd>Esc</kbd> close<br />
+        <kbd>/</kbd> search · <kbd>R</kbd> reset view · <kbd>V</kbd> circular / linear · <kbd>?</kbd> this panel · <kbd>Esc</kbd> close<br />
         <kbd>[</kbd> <kbd>]</kbd> Y scale down / up<br />
         <kbd>a</kbd> fit Y to view and lock · <kbd>Shift</kbd>+<kbd>a</kbd> unlock<br />
         <kbd>p</kbd> shared vs per-track Y scale<br />
