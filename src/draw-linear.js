@@ -11,7 +11,7 @@ const RIGHT = 20
 const RULER_Y = 56
 const TOP = 70
 const BOTTOM = 16
-const KBRO_READ_PT = 9.1 // kbro draws a single read 8 pt high (6 wide) at every zoom; 9.1 matches it on OrbiT's thinner tip
+const KBRO_READ_PT = 8.7 // one read = 8 pt high (6 wide) in kbro; 8.7 matches its unantialiased pixel count (measured)
 
 const clip = (s, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 

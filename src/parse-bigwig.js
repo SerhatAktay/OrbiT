@@ -20,10 +20,12 @@ export async function openBigWig(filehandle) {
 // and bin starts stay in window coordinates (start + i*binSize, may be > length).
 // Each bigWig interval is spread over the bins it overlaps, weighted by overlap;
 // uncovered bases count as 0.
-export async function getBinnedValues(bigWigHandle, chromName, start, end, binCount, chromLength = end) {
+// exact: read the raw intervals instead of a zoom summary level (summaries overstate sparse
+// signal such as single PRO-seq reads); only sensible for windows up to a few Mb.
+export async function getBinnedValues(bigWigHandle, chromName, start, end, binCount, chromLength = end, exact = false) {
   const binSize = (end - start) / binCount
   const sums = new Float64Array(binCount)
-  const basesPerSpan = Math.max(1, Math.floor(binSize))
+  const basesPerSpan = exact ? 1 : Math.max(1, Math.floor(binSize))
 
   // [windowStart, windowEnd) pieces in window coords, with the chrom coord offset.
   const pieces = []

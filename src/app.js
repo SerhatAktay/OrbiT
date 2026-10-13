@@ -138,7 +138,7 @@ async function fetchSignal(track, handle, autoBins) {
   const load = (reader) => {
     const chrom = resolveChrom(handle.chromSizes, genome.name)
     if (!chrom) return Promise.resolve(Array.from({ length: n }, (_, i) => ({ start: start + (i * span) / n, end: start + ((i + 1) * span) / n, value: 0 })))
-    return getBinnedValues(reader, chrom, start, start + span, n, genome.length)
+    return getBinnedValues(reader, chrom, start, start + span, n, genome.length, kbro() && viewSpan <= 2e6)
   }
   const fx = { smoothBp: track.smooth || 0, sharpenUi: track.sharpen || 0, circular: viewSpan >= genome.length }
   const plotW = Math.max(50, svg.clientWidth - LEFT - 20) // 20 = RIGHT margin in draw-linear
@@ -194,7 +194,7 @@ function syncGlobals() {
   $('globals').hidden = !sig.length
   if (!sig.length) return
   $('g-smooth').value = sig[0].smooth
-  $('g-smooth-v').textContent = sig[0].smooth ? `${sig[0].smooth} bp` : 'off'
+  $('g-smooth-v').textContent = sig[0].smooth ? (kbro() ? `level ${Math.round(sig[0].smooth / 10)}` : `${sig[0].smooth} bp`) : 'off'
   $('g-sharpen').value = sig[0].sharpen
   $('g-sharpen-v').textContent = sig[0].sharpen ? `${sig[0].sharpen}%` : 'off'
   $('g-shared').checked = ySettings.shared
