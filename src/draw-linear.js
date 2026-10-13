@@ -10,7 +10,7 @@ const RIGHT = 20
 const RULER_Y = 56
 const TOP = 70
 const BOTTOM = 16
-export const KBRO_GAIN = 0.16 // half-height in RPM-bp per bin: one read (0.0043) is ~2.7% of it, as in kbro
+const KBRO_HEADROOM = 5 // first fit puts the tallest peak at 1/5 of the half-height, as kbro's default view does
 
 const clip = (s, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
@@ -66,12 +66,19 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   let ys = ySettings || {}
   if (kb) {
     // kbro gain: fixed in "signal per bin" units (value x bin bp), so a peak keeps its height
-    // as you zoom. Default calibrated on RPM-scaled PRO-seq; `a` refits it to the current view.
+    // as you zoom. Fitted on the first zoomed-in view (never the whole chromosome); `a` refits it.
     const locked = new Map()
     for (const b of scene.bands) {
       const bins = b.layers?.[0]?.[0]
       if (!b.rawScale || !bins?.length) continue
-      locked.set(b.track.id, (ys.gain.get(b.track.id) ?? KBRO_GAIN) / (bins[0].end - bins[0].start))
+      const id = b.track.id
+      const binBp = bins[0].end - bins[0].start
+      let gain = ys.gain.get(id)
+      if (gain === undefined) {
+        gain = bandMax.get(id) * binBp * KBRO_HEADROOM
+        if (!full) ys.gain.set(id, gain)
+      }
+      locked.set(id, gain / binBp)
     }
     ys = { ...ys, shared: false, locked }
   }

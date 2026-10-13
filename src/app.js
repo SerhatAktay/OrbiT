@@ -21,7 +21,7 @@ import {
   packLanes,
 } from './tracks.js'
 import { openBigWig, getBinnedValues } from './parse-bigwig.js'
-import { transformBins } from './signal.js'
+import { transformBins, kbroBins } from './signal.js'
 import { parseAnnotation, parseGenBank, parseGtfLines, normChrom, compareChroms } from './parse-annotation.js'
 import { drawScene, fmtVal } from './draw.js'
 import { drawLinear, LEFT } from './draw-linear.js'
@@ -130,7 +130,7 @@ async function fetchSignal(track, handle, autoBins) {
   const { start: viewStart, span: viewSpan } = genome.view
   // Short windows default to one bin per nucleotide on integer bp edges, so no bin
   // blends two neighbouring bases. A manual bin count (track.binCount) wins.
-  const nt = !track.binCount && !ySettings.kbro && viewSpan <= NT_MAX_SPAN
+  const nt = !track.binCount && !kbro() && viewSpan <= NT_MAX_SPAN
   const start = nt ? Math.floor(viewStart) : viewStart
   const span = nt ? Math.ceil(viewStart + viewSpan) - start : viewSpan
   const n = nt ? span : Math.max(1, Math.min(track.binCount || autoBins, Math.ceil(span)))
@@ -139,12 +139,17 @@ async function fetchSignal(track, handle, autoBins) {
     if (!chrom) return Promise.resolve(Array.from({ length: n }, (_, i) => ({ start: start + (i * span) / n, end: start + ((i + 1) * span) / n, value: 0 })))
     return getBinnedValues(reader, chrom, start, start + span, n, genome.length)
   }
-  const fx = { smoothBp: track.smooth || 0, sharpenUi: track.sharpen || 0, circular: viewSpan >= genome.length, plain: ySettings.kbro }
+  const fx = { smoothBp: track.smooth || 0, sharpenUi: track.sharpen || 0, circular: viewSpan >= genome.length }
+  const plotW = Math.max(50, svg.clientWidth - LEFT - 20) // 20 = RIGHT margin in draw-linear
+  // kbro: smoothing is a level (the slider value / 10) applied in screen pixels, not bp.
+  const tf = kbro()
+    ? (bins, abs) => kbroBins(bins, { level: Math.round((track.smooth || 0) / 10), pxPerBin: plotW / bins.length, abs })
+    : (bins, abs) => transformBins(bins, { ...fx, abs })
   if (track.strand === 'paired') {
     const [plusBins, minusBins] = await Promise.all([load(handle.plus), load(handle.minus)])
-    return { plusBins: transformBins(plusBins, { ...fx, abs: true }), minusBins: transformBins(minusBins, { ...fx, abs: true }) }
+    return { plusBins: tf(plusBins, true), minusBins: tf(minusBins, true) }
   }
-  return { bins: transformBins(await load(handle.single), fx) }
+  return { bins: tf(await load(handle.single), false) }
 }
 
 async function render() {
@@ -154,7 +159,7 @@ async function render() {
   const height = svg.clientHeight
   const visible = visibleTracksInOrder(trackList).map((t) => (t.type === 'annotation' ? annotationForChrom(t) : t))
   const autoBins = mode === 'linear'
-    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.kbro ? 5 : 2)))) // kbro: ~5 px per bin
+    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.kbro ? 1.5 : 2)))) // kbro: fine bins, smoothed in px
     : Math.max(180, Math.min(2000, Math.round((TAU * (Math.min(width, height) / 2 - 48)) / 2.5)))
   lastAutoBins = autoBins
 
@@ -617,7 +622,8 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 function patchSignals(fn) {
   update(trackList.map((t) => (t.type === 'signal' ? { ...t, ...fn(t) } : t)), { rebuild: true })
 }
-const stepSmooth = (bp, up) => (up ? clamp(bp ? Math.round(bp * 1.5) : 50, 0, 2000) : bp <= 50 ? 0 : Math.round(bp / 1.5))
+const kbro = () => ySettings.kbro && mode === 'linear'
+const stepSmooth = (bp, up) => kbro() ? clamp(bp + (up ? 10 : -10), 0, 2000) : (up ? clamp(bp ? Math.round(bp * 1.5) : 50, 0, 2000) : bp <= 50 ? 0 : Math.round(bp / 1.5))
 const helpEl = $('help')
 function setMode(next) {
   mode = next
@@ -681,7 +687,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', requestRen
 // The full linear view has no rotation, so it always starts at bp 1.
 const setGenome = (next) => { genome = mode === 'linear' && isFullView(next) ? resetView(next) : next; requestRender() }
 attachZoomPan(svg, () => (mode === 'circular' ? genome : null), setGenome, onSvgClick)
-attachLinearZoomPan(svg, () => (mode === 'linear' ? genome : null), () => scene?.plot, setGenome, onSvgClick)
+attachLinearZoomPan(svg, () => (mode === 'linear' ? genome : null), () => scene?.plot, setGenome, onSvgClick, kbro)
 rebuildPanel()
 
 // Test/debug hook.

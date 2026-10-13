@@ -21,8 +21,10 @@ export function radiusOf(svgEl, event) {
 // Linear counterpart: wheel zooms at the cursor, drag pans horizontally.
 // `getPlot` returns { x0, w } of the current scene. As above, getGenome returns
 // null while this mode is inactive.
-export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick) {
+export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick, discrete = () => false) {
   let lastX = null
+  let acc = 0
+  let lastStep = 0
   let moved = 0
   const xIn = (event) => event.clientX - svgEl.getBoundingClientRect().left
   const fracAt = (event) => {
@@ -34,6 +36,17 @@ export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick
     const genome = getGenome()
     if (!genome || !getPlot()) return
     event.preventDefault()
+    if (discrete()) {
+      // kbro: one wheel flick = one 25% step (x0.8 in, x1.25 out) at the cursor; trackpad
+      // inertia is throttled so zooming stays in clean steps.
+      acc += event.deltaY
+      if (Math.abs(acc) < 40 || event.timeStamp - lastStep < 90) return
+      const out = acc > 0
+      acc = 0
+      lastStep = event.timeStamp
+      onChange(zoomAt(genome, out ? 1.25 : 0.8, fracAt(event)))
+      return
+    }
     onChange(zoomAt(genome, Math.exp(event.deltaY * 0.0015), fracAt(event)))
   }, { passive: false })
 

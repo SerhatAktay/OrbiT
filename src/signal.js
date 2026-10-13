@@ -61,14 +61,12 @@ export function peakPreserve(x, s, window, circular = false) {
 }
 
 // smooth: window in bins (<=1 off). sharpen: unsharp strength (0 off).
-// plain: kbro-style smoothing, a mass-preserving blur (peaks get lower and wider, no peak restore).
-export function transformSignal(values, { smooth = 0, sharpen = 0, circular = false, plain = false } = {}) {
+export function transformSignal(values, { smooth = 0, sharpen = 0, circular = false } = {}) {
   const x = Float32Array.from(values, (v) => (Number.isFinite(v) ? v : 0))
   if (smooth <= 1 && sharpen <= 0) return x
   const smoothed = smooth > 1
   // Base trace: peak-preserving smoothing (or the raw signal when smoothing is off).
-  const gs = smoothed ? gaussianSmooth(x, smooth, circular) : x
-  const base = smoothed && !plain ? peakPreserve(x, gs, smooth, circular) : gs
+  const base = smoothed ? peakPreserve(x, gaussianSmooth(x, smooth, circular), smooth, circular) : x
   if (sharpen <= 0) return base
   // Sharpen adds the high-frequency detail (x - local mean) back onto the base, so 0 is
   // the smoothed trace and the effect grows smoothly. ProBrow instead unsharp-masks the
@@ -84,10 +82,34 @@ export const sharpenStrength = (ui) => Math.round(Math.min(1, Math.max(0, ui / 1
 export const smoothBins = (bp, binSize) => (bp > 0 ? Math.max(0, Math.round(bp / binSize)) : 0)
 
 // Apply to a bin array ([{start,end,value}]); `abs` mirrors ProBrow's minus-strand handling.
-export function transformBins(bins, { smoothBp = 0, sharpenUi = 0, circular = false, abs = false, plain = false } = {}) {
+export function transformBins(bins, { smoothBp = 0, sharpenUi = 0, circular = false, abs = false } = {}) {
   if (!bins.length || (smoothBp <= 0 && sharpenUi <= 0)) return bins
   const binSize = bins[0].end - bins[0].start
   const vals = bins.map((b) => (abs ? Math.abs(b.value) : b.value))
-  const out = transformSignal(vals, { smooth: smoothBins(smoothBp, binSize), sharpen: sharpenStrength(sharpenUi), circular, plain })
+  const out = transformSignal(vals, { smooth: smoothBins(smoothBp, binSize), sharpen: sharpenStrength(sharpenUi), circular })
   return bins.map((b, i) => ({ ...b, value: out[i] }))
+}
+
+// kbro-style smoothing in screen pixels, so it looks the same at every zoom. Every peak is
+// drawn through a triangular kernel (~9 px half-width) and each level adds a gentle Gaussian
+// (variance ~1.8 px² per level). Both keep the total signal, so peaks get lower as they widen.
+export function kbroBins(bins, { level = 0, pxPerBin = 1, abs = false } = {}) {
+  if (!bins.length) return bins
+  const tri = Math.max(1, Math.round(9 / pxPerBin))
+  const sigma = (1.34 * Math.sqrt(level)) / pxPerBin
+  const half = tri + Math.ceil(3 * sigma)
+  const kernel = new Float64Array(2 * half + 1)
+  const g = sigma > 0.05 ? Array.from({ length: 2 * half + 1 }, (_, i) => Math.exp(-0.5 * ((i - half) / sigma) ** 2)) : null
+  for (let i = -tri; i <= tri; i++) { // triangle, optionally convolved with the Gaussian
+    const w = tri - Math.abs(i)
+    if (!g) kernel[half + i] += w
+    else for (let j = -half; j <= half; j++) if (Math.abs(i + j) <= half) kernel[half + i + j] += w * g[half + j]
+  }
+  const sum = kernel.reduce((a, b) => a + b, 0)
+  const x = bins.map((b) => (abs ? Math.abs(b.value) : b.value))
+  return bins.map((b, i) => {
+    let acc = 0
+    for (let k = -half; k <= half; k++) acc += (x[i + k] || 0) * kernel[half + k]
+    return { ...b, value: acc / sum }
+  })
 }
