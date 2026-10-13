@@ -39,17 +39,6 @@ export function signalPathLinear(bins, band, viewStart, span, scale, x0, w) {
   return `${d}L${xb(bins[bins.length - 1])},${base}Z`
 }
 
-// kbro look: straight lines between bin centres, so an isolated read is a pointed triangle
-// instead of a flat bar.
-export function signalPathPointed(bins, band, viewStart, span, scale, x0, w) {
-  if (!bins.length) return ''
-  const base = r1(yOf(band, scale, 0))
-  const cx = (b) => r1(xOf((b.start + b.end) / 2 - viewStart, span, x0, w))
-  let d = `M${cx(bins[0])},${base}`
-  for (const b of bins) d += `L${cx(b)},${r1(yOf(band, scale, b.value))}`
-  return `${d}L${cx(bins[bins.length - 1])},${base}Z`
-}
-
 // Feature rectangle from xa to xb, with an arrow tip at the end ('+') or start ('-').
 export function featurePath(xa, xb, top, bottom, strand = null) {
   const mid = (top + bottom) / 2

@@ -91,22 +91,18 @@ export function transformBins(bins, { smoothBp = 0, sharpenUi = 0, circular = fa
 }
 
 // kbro-style smoothing, measured from kbro itself (macOS points, so independent of zoom):
-// every read is drawn through a triangle 3 pt to each side, and each smoothing level adds a
-// Gaussian of 0.6 pt² variance. Both keep the total signal, so peaks get lower as they widen
-// (level 10 halves the peak height).
-export const KBRO_TRI_PT = 3
-export const KBRO_LEVEL_VAR = 0.6
+// the signal is binned in 1 pt columns and blurred with a Gaussian. A lone read already has a
+// variance of 1.5 pt² (σ ≈ 1.2 pt; kbro's spike profile is 1 : 0.5 : 0.15 : 0.03 per column),
+// and each smoothing level adds 0.48 pt². Total signal is kept, so peaks get lower as they
+// widen (level 10 halves the peak height).
+export const KBRO_BASE_VAR = 1.5
+export const KBRO_LEVEL_VAR = 0.48
 export function kbroBins(bins, { level = 0, ptPerBin = 1, abs = false } = {}) {
   if (!bins.length) return bins
-  const H = KBRO_TRI_PT / ptPerBin
-  const sigma = Math.sqrt(KBRO_LEVEL_VAR * level) / ptPerBin
-  const tri = (d) => Math.max(0, 1 - Math.abs(d) / H)
-  const half = Math.ceil(H + 3 * sigma)
+  const sigma = Math.sqrt(KBRO_BASE_VAR + KBRO_LEVEL_VAR * level) / ptPerBin
+  const half = Math.ceil(4 * sigma)
   const kernel = new Float64Array(2 * half + 1)
-  for (let k = -half; k <= half; k++) {
-    if (sigma < 0.05) kernel[half + k] = tri(k)
-    else for (let j = -Math.ceil(H); j <= Math.ceil(H); j++) kernel[half + k] += tri(j) * Math.exp(-0.5 * ((k - j) / sigma) ** 2)
-  }
+  for (let k = -half; k <= half; k++) kernel[half + k] = Math.exp(-0.5 * (k / sigma) ** 2)
   const sum = kernel.reduce((a, b) => a + b, 0)
   const x = bins.map((b) => (abs ? Math.abs(b.value) : b.value))
   return bins.map((b, i) => {

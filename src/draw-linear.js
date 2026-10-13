@@ -3,15 +3,15 @@
 import { el, text, onColor, fmtVal, prepareSignalBands, resolveScale } from './draw.js'
 import { ringOwners } from './tracks.js'
 import { rulerTicks, niceStep, formatBp, visibleSegments } from './render.js'
-import { KBRO_TRI_PT } from './signal.js'
-import { xOf, computeLinearBands, signalPathLinear, signalPathPointed, zeroLineY, featurePath } from './linear.js'
+import { KBRO_BASE_VAR } from './signal.js'
+import { xOf, computeLinearBands, signalPathLinear, zeroLineY, featurePath } from './linear.js'
 
 export const LEFT = 150 // gutter for track names
 const RIGHT = 20
 const RULER_Y = 56
 const TOP = 70
 const BOTTOM = 16
-const KBRO_READ_PT = 8.7 // one read = 8 pt high (6 wide) in kbro; 8.7 matches its unantialiased pixel count (measured)
+const KBRO_READ_PT = 7.9 // kbro: one read = 8 pt high; 7.9 matches its per-read pixel heights on OrbiT (measured)
 
 const clip = (s, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
@@ -83,7 +83,7 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
         if (!full) ys.gain.set(id, gain)
       }
       const unit = ys.unit.get(id)
-      if (gain === undefined && unit) gain = KBRO_READ_PT * KBRO_TRI_PT / unit // peak density of one read = unit / 3.3 pt
+      if (gain === undefined && unit) gain = KBRO_READ_PT * Math.sqrt(2 * Math.PI * KBRO_BASE_VAR) / unit // peak density of one read = unit / (σ√2π)
       if (gain === undefined) gain = peak > 0 ? halfH / peak / 5 : 1 // no unit in the file: tallest peak at 1/5
       locked.set(id, halfH / gain / bpPerPt)
     }
@@ -111,7 +111,7 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
       if (scale.lo < 0) el('line', { x1: x0, y1: zeroLineY(band, scale), x2: x0 + w, y2: zeroLineY(band, scale), stroke: theme.muted, 'stroke-width': 0.5, 'stroke-dasharray': '2 2' }, bandG)
       const multi = band.members.length > 1
       for (const [bins, color] of band.layers) {
-        if (kb) el('path', { d: signalPathPointed(bins, band, vs, span, scale, x0, w), fill: color }, bandG)
+        if (kb) el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color }, bandG) // kbro draws 1 pt bars
         else el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
       }
       names = band.members.map((m) => m.track.name)
