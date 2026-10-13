@@ -1,6 +1,6 @@
 // src/draw-linear.js — linear (straight) SVG scene from already-fetched data.
 // Same inputs and hit-test shape as drawScene: bands carry top/bottom (y) instead of radii.
-import { el, text, onColor, fmtVal, prepareSignalBands, resolveScale } from './draw.js'
+import { el, text, onColor, fmtVal, prepareSignalBands, resolveScale, Y_HEADROOM } from './draw.js'
 import { ringOwners } from './tracks.js'
 import { rulerTicks, niceStep, visibleSegments } from './render.js'
 import { KBRO_BASE_VAR } from './signal.js'
@@ -85,9 +85,10 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   const kb = !!ySettings?.kbro
   let ys = ySettings || {}
   if (kb) {
-    // kbro has no auto-scaling: one read always draws KBRO_READ_PT high (8 pt), at every zoom.
-    // A read is the file's smallest non-zero score (`unit`); `a` instead fits the tallest peak
-    // in the current view to the band and holds that gain while you zoom.
+    // Each band is scaled to the window you are looking at, so it follows you along the genome
+    // (with Y_HEADROOM to spare), unless the gain is held: `a` holds the fit of the current view,
+    // `f` holds kbro's own gain, where one read always draws KBRO_READ_PT high (the file's
+    // smallest non-zero score is one read).
     // g = pt of height per unit of density (signal summed per pt); density = value x bp per pt.
     const bpPerPt = span / w
     const locked = new Map()
@@ -98,13 +99,13 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
       const peak = bandMax.get(id) * bpPerPt
       let gain = ys.gain.get(id)
       if (ys.fit && peak > 0) {
-        gain = halfH / peak
+        gain = halfH / (peak * Y_HEADROOM)
         if (!full) ys.gain.set(id, gain)
       }
       const unit = ys.unit.get(id)
-      if (gain === undefined && unit) gain = KBRO_READ_PT * Math.sqrt(2 * Math.PI * KBRO_BASE_VAR) / unit // peak density of one read = unit / (σ√2π)
-      if (gain === undefined) gain = peak > 0 ? halfH / peak / 5 : 1 // no unit in the file: tallest peak at 1/5
-      locked.set(id, halfH / gain / bpPerPt)
+      if (gain === undefined && ys.readGain && unit) gain = KBRO_READ_PT * Math.sqrt(2 * Math.PI * KBRO_BASE_VAR) / unit // peak density of one read = unit / (σ√2π)
+      if (gain === undefined) continue // auto
+      locked.set(id, halfH / gain / bpPerPt / Y_HEADROOM) // resolveScale puts the headroom back
     }
     ys.fit = false
     ys = { ...ys, shared: false, locked }
@@ -130,7 +131,7 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
       if (scale.lo < 0) el('line', { x1: x0, y1: zeroLineY(band, scale), x2: x0 + w, y2: zeroLineY(band, scale), stroke: theme.muted, 'stroke-width': 0.5, 'stroke-dasharray': '2 2' }, bandG)
       const multi = band.members.length > 1
       for (const [bins, color] of band.layers) {
-        if (kb) el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color }, bandG) // kbro draws 1 pt bars
+        if (kb) el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.55 : 1 }, bandG) // kbro draws 1 pt bars; overlaid samples stay see-through
         else el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
       }
       names = band.members.map((m) => m.track.name)

@@ -194,11 +194,14 @@ export function prepareSignalBands(bands, tracks, data) {
   return { bandMax, sharedMax: Math.max(0, ...bandMax.values()) }
 }
 
-// Scale: fixed range wins; else shared max, else locked max, else own auto.
+// Auto scales stop short of the band edge, so the tallest peak never touches the top (or bottom).
+export const Y_HEADROOM = 1.2
+
+// Scale: fixed range wins; else shared max, else locked max, else own auto (all with headroom).
 export function resolveScale(band, ys, sharedMax, bandMax) {
   let { lo, hi } = band.rawScale
   if (band.track.yScale.mode !== 'fixed') {
-    const m = ys.shared ? sharedMax : ys.locked?.get(band.track.id) ?? bandMax.get(band.track.id)
+    const m = (ys.shared ? sharedMax : ys.locked?.get(band.track.id) ?? bandMax.get(band.track.id)) * Y_HEADROOM
     const f = ys.factor || 1
     lo = lo < 0 || band.mirrored ? -m / f : 0
     hi = m / f

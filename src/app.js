@@ -49,11 +49,12 @@ let genomeDerived = false // length guessed from annotations, replaced by the fi
 let trackList = []
 let scene = null
 let lastAutoBins = 600
-let mode = 'circular' // or 'linear'
+let mode = 'linear' // or 'circular'
 const NT_MAX_SPAN = 4000 // windows up to this many bp show every nucleotide by default
 // Global Y controls (ProBrow): shared symmetric max, zoom factor, locked autoscale.
-// kbro: unit = one read's score per track, gain = fitted pt-per-density override (a), fit = refit on next draw.
-const ySettings = { shared: false, factor: 1, locked: null, kbro: false, unit: new Map(), gain: new Map(), fit: false }
+// kbro (the default linear style): unit = one read's score per track; gain = held pt-per-density
+// (a = fit the current view, f = kbro's fixed read height); fit = refit on the next draw.
+const ySettings = { shared: false, factor: 1, locked: null, kbro: true, readGain: false, unit: new Map(), gain: new Map(), fit: false }
 const bigWigHandles = new Map() // trackId -> { chromSizes, single } | { chromSizes, plus, minus }
 
 // ---- helpers ---------------------------------------------------------------
@@ -424,6 +425,7 @@ function rebuildPanel() {
   renderTrackPanel(panel, trackList, {
     onVisibility: (id, v) => update(setVisibility(trackList, id, v)),
     onColor: (id, c) => update(setColor(trackList, id, c)),
+    onRename: (id, name) => update(setTrackProp(trackList, id, { name }), { rebuild: true }),
     onColorMinus: (id, c) => update(trackList.map((t) => (t.id === id ? { ...t, colorMinus: c } : t))),
     onReorder: (id, order) => update(reorderTrack(trackList, id, order), { rebuild: true }),
     onRemove: (id) => { bigWigHandles.delete(id); update(removeTrack(trackList, id), { rebuild: true }) },
@@ -618,9 +620,25 @@ chromSelect.addEventListener('change', () => {
   genome = resetView(createGenome(chromLengthFor(chromSelect.value) || genome.length, chromSelect.value))
   requestRender()
 })
-$('export-svg').addEventListener('click', () => genome && exportSvg(svg, `${genome.name}_orbit`))
-$('export-html').addEventListener('click', () => genome && exportHtml(svg, `${genome.name}_orbit`))
-$('export-png').addEventListener('click', () => genome && exportPng(svg, `${genome.name}_orbit`).catch((e) => showError(e.message)))
+// Export: one button, a short list of formats.
+const exportMenu = $('export-menu')
+const closeExportMenu = () => { exportMenu.hidden = true; $('export-btn').setAttribute('aria-expanded', 'false') }
+$('export-btn').addEventListener('click', (e) => {
+  e.stopPropagation()
+  exportMenu.hidden = !exportMenu.hidden
+  $('export-btn').setAttribute('aria-expanded', String(!exportMenu.hidden))
+})
+document.addEventListener('click', closeExportMenu)
+document.addEventListener('keydown', (e) => e.key === 'Escape' && closeExportMenu())
+exportMenu.addEventListener('click', (e) => {
+  const kind = e.target.closest('[data-export]')?.dataset.export
+  closeExportMenu()
+  if (!kind || !genome) return
+  const name = `${genome.name}_orbit`
+  if (kind === 'svg') exportSvg(svg, name)
+  else if (kind === 'html') exportHtml(svg, name)
+  else exportPng(svg, name, kind === 'png-hi' ? 6 : 3).catch((err) => showError(err.message))
+})
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 function patchSignals(fn) {
   update(trackList.map((t) => (t.type === 'signal' ? { ...t, ...fn(t) } : t)), { rebuild: true })
@@ -643,6 +661,7 @@ const KEYS = {
   v: toggleMode,
   r: () => { genome = resetView(genome); ySettings.gain.clear(); requestRender() },
   j: () => { ySettings.kbro = !ySettings.kbro; ySettings.gain.clear(); requestRender() },
+  f: () => { if (kbro()) { ySettings.readGain = !ySettings.readGain; ySettings.gain.clear(); requestRender() } }, // kbro's fixed read height
   '[': () => { ySettings.factor = clamp(ySettings.factor / 1.25, 0.1, 10); requestRender() },
   ']': () => { ySettings.factor = clamp(ySettings.factor * 1.25, 0.1, 10); requestRender() },
   a: () => {

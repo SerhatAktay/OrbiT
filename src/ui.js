@@ -29,7 +29,28 @@ export function renderTrackPanel(panelEl, trackList, cb) {
 
     const visible = h('input', { type: 'checkbox', checked: track.visible, title: 'Show/hide' })
     visible.addEventListener('change', () => cb.onVisibility(track.id, visible.checked))
-    const name = h('span', { className: 'track-name', textContent: track.name, title: track.name })
+    const name = h('span', { className: 'track-name', textContent: track.name, title: `${track.name} (double-click to rename)` })
+    // Double-click to rename; Enter or clicking away saves, Escape cancels.
+    name.addEventListener('dblclick', () => {
+      const input = h('input', { className: 'track-name-edit', value: track.name })
+      let finished = false
+      const finish = (commit) => {
+        if (finished) return
+        finished = true
+        const v = input.value.trim()
+        if (commit && v && v !== track.name) cb.onRename(track.id, v)
+        else input.replaceWith(name)
+      }
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') finish(true)
+        else if (e.key === 'Escape') finish(false)
+        e.stopPropagation()
+      })
+      input.addEventListener('blur', () => finish(true))
+      name.replaceWith(input)
+      input.focus()
+      input.select()
+    })
     const color = h('input', { type: 'color', value: track.color, title: 'Colour' })
     color.addEventListener('input', () => cb.onColor(track.id, color.value))
     const up = h('button', { textContent: '↑', title: 'Move outward', disabled: track.order === sorted.length - 1 })

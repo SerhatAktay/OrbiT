@@ -36,7 +36,14 @@
     .row.small { font-size: 12px; color: var(--muted); }
     .row.small input[type=number] { width: 64px; }
     .row.small input[type=range] { flex: 1; }
-    .track-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .track-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+    .track-name-edit { flex: 1; min-width: 0; font: inherit; }
+    .menu { position: relative; }
+    .menu-list { position: absolute; right: 0; top: calc(100% + 4px); min-width: 220px; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px; z-index: 8; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
+    .menu-list[hidden] { display: none; }
+    .menu-list button { text-align: left; border: 0; background: none; padding: 6px 10px; border-radius: 4px; }
+    .menu-list button:hover { background: var(--grid); }
+    .menu-list small { color: var(--muted); margin-left: 8px; }
     input[type=color] { width: 24px; height: 22px; padding: 0; border: 1px solid var(--line); background: none; }
     .grip { cursor: grab; color: var(--muted); user-select: none; }
     .hint { color: var(--muted); font-size: 12px; }
@@ -63,14 +70,20 @@
     <datalist id="search-list"></datalist>
     <select id="chrom" title="Chromosome" hidden></select>
     <span class="spacer"></span>
-    <button id="mode-btn" title="Switch between circular and linear view (V)">Linear view</button>
+    <button id="mode-btn" title="Switch between circular and linear view (V)">Circular view</button>
     <button id="reset-zoom" title="Reset view (R)">Reset view</button>
     <button id="save-session" title="Save view and track settings">Save session</button>
     <button id="load-session" title="Restore settings; then open the same data files">Load session</button>
     <input id="session-input" type="file" accept=".json" hidden />
-    <button id="export-svg">SVG</button>
-    <button id="export-png">PNG</button>
-    <button id="export-html" title="Single shareable HTML file">HTML</button>
+    <div class="menu">
+      <button id="export-btn" title="Save the current view" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+      <div id="export-menu" class="menu-list" hidden>
+        <button data-export="svg">SVG<small>vector</small></button>
+        <button data-export="png">PNG<small>3×</small></button>
+        <button data-export="png-hi">PNG, high resolution<small>6×</small></button>
+        <button data-export="html">HTML<small>single shareable file</small></button>
+      </div>
+    </div>
     <button id="help-btn" title="Mouse and keyboard shortcuts (?)">Help</button>
   </header>
   <main>
@@ -86,7 +99,9 @@
         double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it<br />
         <b>Keyboard</b><br />
         <kbd>/</kbd> search · <kbd>R</kbd> reset view · <kbd>V</kbd> circular / linear · <kbd>?</kbd> this panel · <kbd>Esc</kbd> close<br />
-        <kbd>j</kbd> kbro style (linear): pointed peaks, grid, one read = fixed height at every zoom<br />
+        <kbd>j</kbd> kbro style (linear, default): Gaussian bars, grid lines, Y fitted to what you see<br />
+        &nbsp;&nbsp;<kbd>a</kbd> hold the Y scale of this view · <kbd>Shift</kbd>+<kbd>a</kbd> back to auto · <kbd>f</kbd> kbro's fixed read height<br />
+        Double-click a sample name in the panel to rename it<br />
         &nbsp;&nbsp;kbro keys: <kbd>z</kbd> <kbd>x</kbd> zoom in / out 25% · <kbd>,</kbd> <kbd>.</kbd> pan 12% · <kbd>&lt;</kbd> <kbd>&gt;</kbd> pan 50% · <kbd>q</kbd> <kbd>w</kbd> Y scale · <kbd>S</kbd> <kbd>s</kbd> smooth level up / down<br />
         <kbd>[</kbd> <kbd>]</kbd> Y scale down / up<br />
         <kbd>a</kbd> fit Y to view and lock · <kbd>Shift</kbd>+<kbd>a</kbd> unlock<br />
