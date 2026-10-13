@@ -3,6 +3,7 @@
 import { el, text, onColor, fmtVal, prepareSignalBands, resolveScale } from './draw.js'
 import { ringOwners } from './tracks.js'
 import { rulerTicks, niceStep, formatBp, visibleSegments } from './render.js'
+import { KBRO_TRI_PT } from './signal.js'
 import { xOf, computeLinearBands, signalPathLinear, signalPathPointed, zeroLineY, featurePath } from './linear.js'
 
 export const LEFT = 150 // gutter for track names
@@ -10,7 +11,7 @@ const RIGHT = 20
 const RULER_Y = 56
 const TOP = 70
 const BOTTOM = 16
-const KBRO_HEADROOM = 5 // first fit puts the tallest peak at 1/5 of the half-height, as kbro's default view does
+const KBRO_READ_PT = 9.1 // kbro draws a single read 8 pt high (6 wide) at every zoom; 9.1 matches it on OrbiT's thinner tip
 
 const clip = (s, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
@@ -65,21 +66,28 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   const kb = !!ySettings?.kbro
   let ys = ySettings || {}
   if (kb) {
-    // kbro gain: fixed in "signal per bin" units (value x bin bp), so a peak keeps its height
-    // as you zoom. Fitted on the first zoomed-in view (never the whole chromosome); `a` refits it.
+    // kbro has no auto-scaling: one read always draws KBRO_READ_PT high (8 pt), at every zoom.
+    // A read is the file's smallest non-zero score (`unit`); `a` instead fits the tallest peak
+    // in the current view to the band and holds that gain while you zoom.
+    // g = pt of height per unit of density (signal summed per pt); density = value x bp per pt.
+    const bpPerPt = span / w
     const locked = new Map()
     for (const b of scene.bands) {
-      const bins = b.layers?.[0]?.[0]
-      if (!b.rawScale || !bins?.length) continue
+      if (!b.rawScale) continue
       const id = b.track.id
-      const binBp = bins[0].end - bins[0].start
+      const halfH = (b.bottom - b.top) / (b.mirrored ? 2 : 1)
+      const peak = bandMax.get(id) * bpPerPt
       let gain = ys.gain.get(id)
-      if (gain === undefined) {
-        gain = bandMax.get(id) * binBp * KBRO_HEADROOM
+      if (ys.fit && peak > 0) {
+        gain = halfH / peak
         if (!full) ys.gain.set(id, gain)
       }
-      locked.set(id, gain / binBp)
+      const unit = ys.unit.get(id)
+      if (gain === undefined && unit) gain = KBRO_READ_PT * KBRO_TRI_PT / unit // peak density of one read = unit / 3.3 pt
+      if (gain === undefined) gain = peak > 0 ? halfH / peak / 5 : 1 // no unit in the file: tallest peak at 1/5
+      locked.set(id, halfH / gain / bpPerPt)
     }
+    ys.fit = false
     ys = { ...ys, shared: false, locked }
   }
 

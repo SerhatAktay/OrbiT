@@ -9,7 +9,10 @@ export async function openBigWig(filehandle) {
   for (const ref of Object.values(header.refsByNumber)) {
     chromSizes[ref.name] = ref.length
   }
-  return { chromSizes, handle: bigwig }
+  // One read = the smallest non-zero |score| in the file (RPM-scaled PRO-seq: 1 / mapped reads).
+  const ts = header.totalSummary
+  const unit = ts && ts.scoreMin > 0 ? ts.scoreMin : ts && ts.scoreMax < 0 ? -ts.scoreMax : null
+  return { chromSizes, handle: bigwig, unit }
 }
 
 // Mean signal in `binCount` equal bins over [start, end). `end` may exceed the

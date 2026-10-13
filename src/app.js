@@ -1,6 +1,6 @@
 // src/app.js — state, file loading, render loop, hover/click.
 import { BlobFile } from '../vendor/bbi.bundle.js'
-import { createGenome, resetView, setView, zoomToRange, bpAtRel, isFullView } from './genome.js'
+import { createGenome, resetView, setView, zoomToRange, bpAtRel, isFullView, zoomAt, panBy } from './genome.js'
 import {
   PALETTE,
   createSignalTrack,
@@ -52,7 +52,8 @@ let lastAutoBins = 600
 let mode = 'circular' // or 'linear'
 const NT_MAX_SPAN = 4000 // windows up to this many bp show every nucleotide by default
 // Global Y controls (ProBrow): shared symmetric max, zoom factor, locked autoscale.
-const ySettings = { shared: false, factor: 1, locked: null, kbro: false, gain: new Map() }
+// kbro: unit = one read's score per track, gain = fitted pt-per-density override (a), fit = refit on next draw.
+const ySettings = { shared: false, factor: 1, locked: null, kbro: false, unit: new Map(), gain: new Map(), fit: false }
 const bigWigHandles = new Map() // trackId -> { chromSizes, single } | { chromSizes, plus, minus }
 
 // ---- helpers ---------------------------------------------------------------
@@ -143,7 +144,7 @@ async function fetchSignal(track, handle, autoBins) {
   const plotW = Math.max(50, svg.clientWidth - LEFT - 20) // 20 = RIGHT margin in draw-linear
   // kbro: smoothing is a level (the slider value / 10) applied in screen pixels, not bp.
   const tf = kbro()
-    ? (bins, abs) => kbroBins(bins, { level: Math.round((track.smooth || 0) / 10), pxPerBin: plotW / bins.length, abs })
+    ? (bins, abs) => kbroBins(bins, { level: Math.round((track.smooth || 0) / 10), ptPerBin: plotW / bins.length, abs })
     : (bins, abs) => transformBins(bins, { ...fx, abs })
   if (track.strand === 'paired') {
     const [plusBins, minusBins] = await Promise.all([load(handle.plus), load(handle.minus)])
@@ -159,7 +160,7 @@ async function render() {
   const height = svg.clientHeight
   const visible = visibleTracksInOrder(trackList).map((t) => (t.type === 'annotation' ? annotationForChrom(t) : t))
   const autoBins = mode === 'linear'
-    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.kbro ? 1.5 : 2)))) // kbro: fine bins, smoothed in px
+    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.kbro ? 1 : 2)))) // kbro: one bin per pt, smoothed in pt
     : Math.max(180, Math.min(2000, Math.round((TAU * (Math.min(width, height) / 2 - 48)) / 2.5)))
   lastAutoBins = autoBins
 
@@ -242,6 +243,8 @@ async function openEntry(entry) {
     chromSizes: first.chromSizes,
     ...(paired ? { plus: opened.plus.handle, minus: opened.minus.handle } : { single: opened.single.handle }),
   })
+  const units = Object.values(opened).map((o) => o.unit).filter(Boolean)
+  if (units.length) ySettings.unit.set(track.id, Math.min(...units))
   // PRO-seq default: first stranded pair turns on one shared Y range across samples.
   if (paired && !trackList.some((t) => t.strand === 'paired')) ySettings.shared = true
   trackList = addTrack(trackList, track)
@@ -642,14 +645,22 @@ const KEYS = {
   j: () => { ySettings.kbro = !ySettings.kbro; ySettings.gain.clear(); requestRender() },
   '[': () => { ySettings.factor = clamp(ySettings.factor / 1.25, 0.1, 10); requestRender() },
   ']': () => { ySettings.factor = clamp(ySettings.factor * 1.25, 0.1, 10); requestRender() },
-  a: () => { ySettings.locked = null; ySettings.gain.clear(); afterRender = () => {
-    ySettings.locked = new Map(scene.bandMax)
-    if (ySettings.kbro) for (const b of scene.bands) { // kbro: refit the fixed gain to this view
-      const bins = b.layers?.[0]?.[0]
-      if (b.rawScale && bins?.length) ySettings.gain.set(b.track.id, scene.bandMax.get(b.track.id) * (bins[0].end - bins[0].start))
-    }
+  a: () => {
+    ySettings.locked = null
+    ySettings.gain.clear()
+    if (kbro()) { ySettings.fit = true; requestRender(); return } // kbro: refit on the next draw
+    afterRender = () => { ySettings.locked = new Map(scene.bandMax); requestRender() }
     requestRender()
-  }; requestRender() },
+  },
+  // kbro's own keys: zoom and pan in fixed steps around the view centre (linear kbro mode only).
+  z: () => kbro() && (genome = zoomAt(genome, 0.8, 0.5), requestRender()),
+  x: () => kbro() && (genome = zoomAt(genome, 1.25, 0.5), requestRender()),
+  '.': () => kbro() && (genome = panBy(genome, genome.view.span * 0.125), requestRender()),
+  ',': () => kbro() && (genome = panBy(genome, -genome.view.span * 0.125), requestRender()),
+  '>': () => kbro() && (genome = panBy(genome, genome.view.span * 0.5), requestRender()),
+  '<': () => kbro() && (genome = panBy(genome, -genome.view.span * 0.5), requestRender()),
+  q: () => kbro() && KEYS['['](),
+  w: () => kbro() && KEYS[']'](),
   A: () => { ySettings.locked = null; ySettings.gain.clear(); requestRender() },
   p: () => { ySettings.shared = !ySettings.shared; requestRender() },
   s: () => patchSignals((t) => ({ smooth: stepSmooth(t.smooth, false) })),

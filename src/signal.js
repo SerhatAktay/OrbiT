@@ -90,20 +90,22 @@ export function transformBins(bins, { smoothBp = 0, sharpenUi = 0, circular = fa
   return bins.map((b, i) => ({ ...b, value: out[i] }))
 }
 
-// kbro-style smoothing in screen pixels, so it looks the same at every zoom. Every peak is
-// drawn through a triangular kernel (~9 px half-width) and each level adds a gentle Gaussian
-// (variance ~1.8 px² per level). Both keep the total signal, so peaks get lower as they widen.
-export function kbroBins(bins, { level = 0, pxPerBin = 1, abs = false } = {}) {
+// kbro-style smoothing, measured from kbro itself (macOS points, so independent of zoom):
+// every read is drawn through a triangle 3 pt to each side, and each smoothing level adds a
+// Gaussian of 0.6 pt² variance. Both keep the total signal, so peaks get lower as they widen
+// (level 10 halves the peak height).
+export const KBRO_TRI_PT = 3
+export const KBRO_LEVEL_VAR = 0.6
+export function kbroBins(bins, { level = 0, ptPerBin = 1, abs = false } = {}) {
   if (!bins.length) return bins
-  const tri = Math.max(1, Math.round(9 / pxPerBin))
-  const sigma = (1.34 * Math.sqrt(level)) / pxPerBin
-  const half = tri + Math.ceil(3 * sigma)
+  const H = KBRO_TRI_PT / ptPerBin
+  const sigma = Math.sqrt(KBRO_LEVEL_VAR * level) / ptPerBin
+  const tri = (d) => Math.max(0, 1 - Math.abs(d) / H)
+  const half = Math.ceil(H + 3 * sigma)
   const kernel = new Float64Array(2 * half + 1)
-  const g = sigma > 0.05 ? Array.from({ length: 2 * half + 1 }, (_, i) => Math.exp(-0.5 * ((i - half) / sigma) ** 2)) : null
-  for (let i = -tri; i <= tri; i++) { // triangle, optionally convolved with the Gaussian
-    const w = tri - Math.abs(i)
-    if (!g) kernel[half + i] += w
-    else for (let j = -half; j <= half; j++) if (Math.abs(i + j) <= half) kernel[half + i + j] += w * g[half + j]
+  for (let k = -half; k <= half; k++) {
+    if (sigma < 0.05) kernel[half + k] = tri(k)
+    else for (let j = -Math.ceil(H); j <= Math.ceil(H); j++) kernel[half + k] += tri(j) * Math.exp(-0.5 * ((k - j) / sigma) ** 2)
   }
   const sum = kernel.reduce((a, b) => a + b, 0)
   const x = bins.map((b) => (abs ? Math.abs(b.value) : b.value))
