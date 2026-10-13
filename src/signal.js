@@ -61,12 +61,14 @@ export function peakPreserve(x, s, window, circular = false) {
 }
 
 // smooth: window in bins (<=1 off). sharpen: unsharp strength (0 off).
-export function transformSignal(values, { smooth = 0, sharpen = 0, circular = false } = {}) {
+// plain: kbro-style smoothing, a mass-preserving blur (peaks get lower and wider, no peak restore).
+export function transformSignal(values, { smooth = 0, sharpen = 0, circular = false, plain = false } = {}) {
   const x = Float32Array.from(values, (v) => (Number.isFinite(v) ? v : 0))
   if (smooth <= 1 && sharpen <= 0) return x
   const smoothed = smooth > 1
   // Base trace: peak-preserving smoothing (or the raw signal when smoothing is off).
-  const base = smoothed ? peakPreserve(x, gaussianSmooth(x, smooth, circular), smooth, circular) : x
+  const gs = smoothed ? gaussianSmooth(x, smooth, circular) : x
+  const base = smoothed && !plain ? peakPreserve(x, gs, smooth, circular) : gs
   if (sharpen <= 0) return base
   // Sharpen adds the high-frequency detail (x - local mean) back onto the base, so 0 is
   // the smoothed trace and the effect grows smoothly. ProBrow instead unsharp-masks the
@@ -82,10 +84,10 @@ export const sharpenStrength = (ui) => Math.round(Math.min(1, Math.max(0, ui / 1
 export const smoothBins = (bp, binSize) => (bp > 0 ? Math.max(0, Math.round(bp / binSize)) : 0)
 
 // Apply to a bin array ([{start,end,value}]); `abs` mirrors ProBrow's minus-strand handling.
-export function transformBins(bins, { smoothBp = 0, sharpenUi = 0, circular = false, abs = false } = {}) {
+export function transformBins(bins, { smoothBp = 0, sharpenUi = 0, circular = false, abs = false, plain = false } = {}) {
   if (!bins.length || (smoothBp <= 0 && sharpenUi <= 0)) return bins
   const binSize = bins[0].end - bins[0].start
   const vals = bins.map((b) => (abs ? Math.abs(b.value) : b.value))
-  const out = transformSignal(vals, { smooth: smoothBins(smoothBp, binSize), sharpen: sharpenStrength(sharpenUi), circular })
+  const out = transformSignal(vals, { smooth: smoothBins(smoothBp, binSize), sharpen: sharpenStrength(sharpenUi), circular, plain })
   return bins.map((b, i) => ({ ...b, value: out[i] }))
 }

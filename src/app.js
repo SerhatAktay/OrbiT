@@ -52,7 +52,7 @@ let lastAutoBins = 600
 let mode = 'circular' // or 'linear'
 const NT_MAX_SPAN = 4000 // windows up to this many bp show every nucleotide by default
 // Global Y controls (ProBrow): shared symmetric max, zoom factor, locked autoscale.
-const ySettings = { shared: false, factor: 1, locked: null }
+const ySettings = { shared: false, factor: 1, locked: null, kbro: false, gain: new Map() }
 const bigWigHandles = new Map() // trackId -> { chromSizes, single } | { chromSizes, plus, minus }
 
 // ---- helpers ---------------------------------------------------------------
@@ -130,7 +130,7 @@ async function fetchSignal(track, handle, autoBins) {
   const { start: viewStart, span: viewSpan } = genome.view
   // Short windows default to one bin per nucleotide on integer bp edges, so no bin
   // blends two neighbouring bases. A manual bin count (track.binCount) wins.
-  const nt = !track.binCount && viewSpan <= NT_MAX_SPAN
+  const nt = !track.binCount && !ySettings.kbro && viewSpan <= NT_MAX_SPAN
   const start = nt ? Math.floor(viewStart) : viewStart
   const span = nt ? Math.ceil(viewStart + viewSpan) - start : viewSpan
   const n = nt ? span : Math.max(1, Math.min(track.binCount || autoBins, Math.ceil(span)))
@@ -139,7 +139,7 @@ async function fetchSignal(track, handle, autoBins) {
     if (!chrom) return Promise.resolve(Array.from({ length: n }, (_, i) => ({ start: start + (i * span) / n, end: start + ((i + 1) * span) / n, value: 0 })))
     return getBinnedValues(reader, chrom, start, start + span, n, genome.length)
   }
-  const fx = { smoothBp: track.smooth || 0, sharpenUi: track.sharpen || 0, circular: viewSpan >= genome.length }
+  const fx = { smoothBp: track.smooth || 0, sharpenUi: track.sharpen || 0, circular: viewSpan >= genome.length, plain: ySettings.kbro }
   if (track.strand === 'paired') {
     const [plusBins, minusBins] = await Promise.all([load(handle.plus), load(handle.minus)])
     return { plusBins: transformBins(plusBins, { ...fx, abs: true }), minusBins: transformBins(minusBins, { ...fx, abs: true }) }
@@ -154,7 +154,7 @@ async function render() {
   const height = svg.clientHeight
   const visible = visibleTracksInOrder(trackList).map((t) => (t.type === 'annotation' ? annotationForChrom(t) : t))
   const autoBins = mode === 'linear'
-    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / 2)))
+    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.kbro ? 5 : 2)))) // kbro: ~5 px per bin
     : Math.max(180, Math.min(2000, Math.round((TAU * (Math.min(width, height) / 2 - 48)) / 2.5)))
   lastAutoBins = autoBins
 
@@ -632,11 +632,19 @@ const toggleMode = () => setMode(mode === 'linear' ? 'circular' : 'linear')
 $('mode-btn').addEventListener('click', toggleMode)
 const KEYS = {
   v: toggleMode,
-  r: () => { genome = resetView(genome); requestRender() },
+  r: () => { genome = resetView(genome); ySettings.gain.clear(); requestRender() },
+  j: () => { ySettings.kbro = !ySettings.kbro; ySettings.gain.clear(); requestRender() },
   '[': () => { ySettings.factor = clamp(ySettings.factor / 1.25, 0.1, 10); requestRender() },
   ']': () => { ySettings.factor = clamp(ySettings.factor * 1.25, 0.1, 10); requestRender() },
-  a: () => { ySettings.locked = null; afterRender = () => { ySettings.locked = new Map(scene.bandMax); requestRender() }; requestRender() },
-  A: () => { ySettings.locked = null; requestRender() },
+  a: () => { ySettings.locked = null; ySettings.gain.clear(); afterRender = () => {
+    ySettings.locked = new Map(scene.bandMax)
+    if (ySettings.kbro) for (const b of scene.bands) { // kbro: refit the fixed gain to this view
+      const bins = b.layers?.[0]?.[0]
+      if (b.rawScale && bins?.length) ySettings.gain.set(b.track.id, scene.bandMax.get(b.track.id) * (bins[0].end - bins[0].start))
+    }
+    requestRender()
+  }; requestRender() },
+  A: () => { ySettings.locked = null; ySettings.gain.clear(); requestRender() },
   p: () => { ySettings.shared = !ySettings.shared; requestRender() },
   s: () => patchSignals((t) => ({ smooth: stepSmooth(t.smooth, false) })),
   S: () => patchSignals((t) => ({ smooth: stepSmooth(t.smooth, true) })),

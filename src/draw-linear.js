@@ -3,13 +3,14 @@
 import { el, text, onColor, fmtVal, prepareSignalBands, resolveScale } from './draw.js'
 import { ringOwners } from './tracks.js'
 import { rulerTicks, niceStep, formatBp, visibleSegments } from './render.js'
-import { xOf, computeLinearBands, signalPathLinear, zeroLineY, featurePath } from './linear.js'
+import { xOf, computeLinearBands, signalPathLinear, signalPathPointed, zeroLineY, featurePath } from './linear.js'
 
 export const LEFT = 150 // gutter for track names
 const RIGHT = 20
 const RULER_Y = 56
 const TOP = 70
 const BOTTOM = 16
+export const KBRO_GAIN = 0.16 // half-height in RPM-bp per bin: one read (0.0043) is ~2.7% of it, as in kbro
 
 const clip = (s, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
@@ -61,12 +62,30 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   scene.bands = computeLinearBands(owners, { top: TOP, bottom: height - BOTTOM })
   const { bandMax, sharedMax } = prepareSignalBands(scene.bands, tracks, data)
   scene.bandMax = bandMax
-  const ys = ySettings || {}
+  const kb = !!ySettings?.kbro
+  let ys = ySettings || {}
+  if (kb) {
+    // kbro gain: fixed in "signal per bin" units (value x bin bp), so a peak keeps its height
+    // as you zoom. Default calibrated on RPM-scaled PRO-seq; `a` refits it to the current view.
+    const locked = new Map()
+    for (const b of scene.bands) {
+      const bins = b.layers?.[0]?.[0]
+      if (!b.rawScale || !bins?.length) continue
+      locked.set(b.track.id, (ys.gain.get(b.track.id) ?? KBRO_GAIN) / (bins[0].end - bins[0].start))
+    }
+    ys = { ...ys, shared: false, locked }
+  }
 
   for (const band of scene.bands) {
     const { track, top, bottom } = band
     const bandG = el('g', {}, g)
     el('rect', { x: x0, y: top, width: w, height: bottom - top, fill: theme.grid }, bandG)
+    if (kb) {
+      for (const t of rulerTicks(length, vs, span)) {
+        const x = xOf(t.rel, span, x0, w)
+        if (x >= x0 - 0.5 && x <= x0 + w + 0.5) el('line', { x1: x, y1: top, x2: x, y2: bottom, stroke: theme.muted, 'stroke-opacity': t.major ? 0.45 : 0.2, 'stroke-width': t.major ? 1.2 : 0.8 }, bandG)
+      }
+    }
     let names = [track.name]
     let rangeLine = null
     if (track.type === 'annotation') {
@@ -77,7 +96,8 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
       if (scale.lo < 0) el('line', { x1: x0, y1: zeroLineY(band, scale), x2: x0 + w, y2: zeroLineY(band, scale), stroke: theme.muted, 'stroke-width': 0.5, 'stroke-dasharray': '2 2' }, bandG)
       const multi = band.members.length > 1
       for (const [bins, color] of band.layers) {
-        el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
+        if (kb) el('path', { d: signalPathPointed(bins, band, vs, span, scale, x0, w), fill: color }, bandG)
+        else el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
       }
       names = band.members.map((m) => m.track.name)
       rangeLine = `${fmtVal(scale.lo)}…${fmtVal(scale.hi)}`
