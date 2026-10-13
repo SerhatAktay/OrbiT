@@ -2,14 +2,18 @@
 // Same inputs and hit-test shape as drawScene: bands carry top/bottom (y) instead of radii.
 import { el, text, onColor, fmtVal, prepareSignalBands, resolveScale } from './draw.js'
 import { ringOwners } from './tracks.js'
-import { rulerTicks, niceStep, formatBp, visibleSegments } from './render.js'
+import { rulerTicks, niceStep, visibleSegments } from './render.js'
 import { KBRO_BASE_VAR } from './signal.js'
 import { xOf, computeLinearBands, signalPathLinear, zeroLineY, featurePath } from './linear.js'
 
 export const LEFT = 150 // gutter for track names
 const RIGHT = 20
 const RULER_Y = 56
-const TOP = 70
+const TOP = 84 // room under the ruler for the grid-distance bracket
+const END_LABEL_PAD = 70 // tick labels keep this far from the window-end labels
+
+// "50 bp", "2 kb", "1.5 Mb": distance between two grid lines.
+const formatDist = (bp) => (bp >= 1e6 ? `${+(bp / 1e6).toFixed(2)} Mb` : bp >= 1e3 ? `${+(bp / 1e3).toFixed(2)} kb` : `${+bp.toFixed(2)} bp`)
 const BOTTOM = 16
 const KBRO_READ_PT = 7.9 // kbro: one read = 8 pt high; 7.9 matches its per-read pixel heights on OrbiT (measured)
 
@@ -28,12 +32,9 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   const g = el('g', {}, root)
   if (height < TOP + BOTTOM + 60 || width < LEFT + 120) return scene
 
-  // Gutter header: where the window is.
-  const range = full
-    ? `${length.toLocaleString('en-US')} bp`
-    : `${Math.round(vs + 1).toLocaleString('en-US')}–${Math.round(((vs + span - 1) % length) + 1).toLocaleString('en-US')}`
+  // Gutter header: the chromosome (the window ends are printed on the ruler, in full).
   text(g, genome.name, 12, 22, { 'font-size': 15, 'font-weight': 600, fill: theme.fg })
-  text(g, range, 12, 40, { 'font-size': 11, fill: theme.muted })
+  text(g, full ? `${length.toLocaleString('en-US')} bp` : `${Math.round(span).toLocaleString('en-US')} bp window`, 12, 40, { 'font-size': 11, fill: theme.muted })
 
   // Minimap strip: whole genome with the window as a box (zoomed only).
   if (!full) {
@@ -51,11 +52,29 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   // Ruler.
   el('line', { x1: x0, y1: RULER_Y, x2: x0 + w, y2: RULER_Y, stroke: theme.fg, 'stroke-width': 1 }, g)
   const step = niceStep(span)
+  const num = (n) => Math.round(n).toLocaleString('en-US')
+  // Window ends in full, so the coordinates are always exact, however far you zoom.
+  text(g, num(vs + 1), x0, RULER_Y - 14, { 'font-size': 10, 'font-weight': 600, fill: theme.fg, 'text-anchor': 'start' })
+  text(g, num(((vs + span - 1) % length) + 1), x0 + w, RULER_Y - 14, { 'font-size': 10, 'font-weight': 600, fill: theme.fg, 'text-anchor': 'end' })
+  // Label every `stride`-th major tick, so labels never touch and keep an even rhythm.
+  const labelPx = num(Math.min(length, vs + span)).length * 6 + 14
+  const stride = Math.max(1, Math.ceil(labelPx / ((step / span) * w)))
+  const majors = []
   for (const t of rulerTicks(length, vs, span)) {
     const x = xOf(t.rel, span, x0, w)
     if (x < x0 - 0.5 || x > x0 + w + 0.5) continue
     el('line', { x1: x, y1: RULER_Y, x2: x, y2: RULER_Y - (t.major ? 8 : 4), stroke: theme.fg, 'stroke-width': t.major ? 1 : 0.6 }, g)
-    if (t.major) text(g, step >= 1000 ? formatBp(t.bp) : t.bp.toLocaleString('en-US'), x, RULER_Y - 14, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'middle' })
+    if (!t.major) continue
+    majors.push(x)
+    if (Math.round((vs + t.rel) / step) % stride !== 0 || x < x0 + END_LABEL_PAD || x > x0 + w - END_LABEL_PAD) continue
+    text(g, num(t.bp), x, RULER_Y - 14, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'middle' })
+  }
+  // Distance between two neighbouring (major) grid lines, so the grid has a scale.
+  if (majors.length >= 2) {
+    const [xa, xb] = majors
+    const y = RULER_Y + 6
+    el('path', { d: `M${xa},${y - 3}V${y + 3}M${xa},${y}H${xb}M${xb},${y - 3}V${y + 3}`, fill: 'none', stroke: theme.muted, 'stroke-width': 1 }, g)
+    text(g, formatDist(step), (xa + xb) / 2, y + 12, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'middle' })
   }
 
   // Bands.
