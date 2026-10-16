@@ -1,6 +1,4 @@
-<p align="center"><img src="icon.png" alt="OrbiT logo" width="96" /></p>
-
-# OrbiT
+<h1><img src="icon.svg" alt="" width="40" align="absmiddle" /> OrbiT</h1>
 
 Interactive viewer for small circular genomes (mitochondria first), built around strand-specific PRO-seq style signal. It has a circular view and a linear view of the same data. Everything runs locally in your browser: no upload, no backend.
 
