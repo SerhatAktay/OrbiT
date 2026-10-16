@@ -15,7 +15,7 @@
     body { margin: 0; height: 100vh; display: flex; flex-direction: column; font: 13px system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--fg); }
     header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
     header h1 { font-size: 15px; margin: 0 8px 0 0; display: flex; align-items: center; gap: 7px; }
-    header h1 img { width: 24px; height: 24px; }
+    header h1 img { height: 26px; width: auto; display: block; }
     #help .about { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); line-height: 1.5; }
     #help .about a { color: var(--accent); }
     button, select, input { font: inherit; color: inherit; }
@@ -67,7 +67,7 @@
 </head>
 <body>
   <header>
-    <h1><img src="icon.svg" alt="" />OrbiT</h1>
+    <h1><img src="logo.svg" alt="OrbiT" /></h1>
     <button id="open-files">Open files…</button>
     <input id="file-input" type="file" multiple hidden accept=".bw,.bigwig,.bedgraph,.bdg,.bg,.gz,.bed,.gtf,.gff,.gff3,.gb,.gbk,.gbff,.genbank" />
     <button id="fetch-annotation" title="Download a GenBank annotation from NCBI by accession or name">Fetch annotation…</button>
