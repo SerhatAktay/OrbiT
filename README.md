@@ -23,7 +23,7 @@ Without git: on the [repo page](https://github.com/SerhatAktay/OrbiT) click **Co
 ```
 python3 scripts/serve.py        # Windows: python scripts/serve.py
 ```
-This opens OrbiT in your default browser (<http://localhost:8765>). If it does not, open that address yourself. The terminal keeps running while the server is up; leave it open. `npm start` does the same.
+This opens OrbiT in your default browser (<http://localhost:8765>). If it does not, open that address yourself. The terminal keeps running while the server is up; leave it open. `npm start` does the same. On macOS you can instead double-click `start_OrbiT.command` (first time: right-click, Open).
 
 **3. Stop** with `Ctrl+C` in the terminal.
 

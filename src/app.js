@@ -18,6 +18,7 @@ import {
   visibleTracksInOrder,
   checkGenomeLengthMismatch,
   pairBigWigFiles,
+  strandInfo,
   packLanes,
 } from './tracks.js'
 import { openBigWig, getBinnedValues } from './parse-bigwig.js'
@@ -55,6 +56,7 @@ const NT_MAX_SPAN = 4000 // area style: windows up to this many bp show every nu
 // style (Gaussian bars); off = area outline. Bars, linear: unit = one read's score per track;
 // gain = held pt-per-density (a = fit the current view, f = fixed read height); fit = refit on the next draw.
 const ySettings = { shared: false, factor: 1, locked: null, bars: true, readGain: false, unit: new Map(), gain: new Map(), fit: false }
+const loneStrand = new Map() // trackId -> { key, side, file } for unpaired strand files, so a later opposite file can join them
 const bigWigHandles = new Map() // trackId -> { chromSizes, single } | { chromSizes, plus, minus }
 
 // ---- helpers ---------------------------------------------------------------
@@ -264,9 +266,23 @@ async function handleFiles(files) {
   const known = new Set([...bigwigs, ...annotations])
   for (const f of files) if (!known.has(f)) showError(`"${f.name}" isn't a bigWig (.bw) or annotation (.bed/.gtf/.gff) file.`)
 
+  // An opposite-strand file opened earlier pairs with a new one: pull the old file back in and drop its track.
+  for (const f of [...bigwigs]) {
+    const info = strandInfo(f)
+    if (!info) continue
+    for (const [id, p] of loneStrand) {
+      if (p.key !== info.key || p.side === info.side || !trackList.some((t) => t.id === id)) continue
+      bigwigs.push(p.file)
+      bigWigHandles.delete(id)
+      trackList = removeTrack(trackList, id)
+      loneStrand.delete(id)
+    }
+  }
   for (const entry of pairBigWigFiles(bigwigs)) {
     try {
       await openEntry(entry)
+      const info = entry.single && strandInfo(entry.single)
+      if (info) loneStrand.set(trackList[trackList.length - 1].id, { ...info, file: entry.single })
     } catch (err) {
       showError(`Couldn't read "${entry.name}": ${err.message}`)
     }

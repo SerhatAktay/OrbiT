@@ -138,7 +138,6 @@ export function drawScene(root, { width, height, genome, tracks, data, theme, yS
 
   const owners = ringOwners(tracks)
   scene.bands = computeTrackBands(owners, { minRadius: minRadius + 34, maxRadius, bandGap: 4 })
-  const fs = 10
   const ys = ySettings?.bars ? { ...ySettings, shared: false } : ySettings || {}
 
   const { bandMax, sharedMax } = prepareSignalBands(scene.bands, tracks, data)
@@ -149,7 +148,6 @@ export function drawScene(root, { width, height, genome, tracks, data, theme, yS
     const bandG = el('g', {}, g)
     el('circle', { r: (innerRadius + outerRadius) / 2, fill: 'none', stroke: theme.grid, 'stroke-width': outerRadius - innerRadius }, bandG)
 
-    let caption = track.name
     if (track.type === 'annotation') {
       drawAnnotation(bandG, band, genome, theme)
     } else if (band.rawScale) {
@@ -162,11 +160,7 @@ export function drawScene(root, { width, height, genome, tracks, data, theme, yS
         if (ys.bars) el('path', { d: signalPath(bins, band, vs, span, scale), fill: color, 'fill-opacity': multi ? 0.55 : 1 }, bandG) // overlaid samples stay see-through
         else el('path', { d: signalPath(bins, band, vs, span, scale), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
       }
-      caption = band.members.map((m) => m.track.name).join(' + ') || caption
-      caption = `${caption.length > 22 ? `${caption.slice(0, 21)}…` : caption}  ${fmtVal(scale.lo)}…${fmtVal(scale.hi)}`
     }
-    const t = text(g, caption, -6, -outerRadius + fs + 1, { 'font-size': fs, fill: theme.fg, 'text-anchor': 'end', stroke: theme.bg, 'stroke-width': 3, 'paint-order': 'stroke' })
-    t.setAttribute('pointer-events', 'none')
   }
   return scene
 }
