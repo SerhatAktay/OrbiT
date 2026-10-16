@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "A paper is in preparation. Until it is out, please cite this software as below."
+title: "OrbiT"
+abstract: "Interactive viewer for small circular genomes (mitochondria first) with strand-specific PRO-seq style signal."
+type: software
+authors:
+  - family-names: Aktay
+    given-names: Serhat
+version: 1.0.0
+date-released: "2026-10-16"
+license: MIT
+url: "https://serhataktay.github.io/OrbiT/"
+repository-code: "https://github.com/SerhatAktay/OrbiT"

@@ -111,6 +111,12 @@ A paper is in preparation. Until it is out, please cite the GitHub page:
 
 > Aktay, S. OrbiT. https://github.com/SerhatAktay/OrbiT
 
+GitHub's "Cite this repository" button uses `CITATION.cff`.
+
+## License
+
+[MIT](LICENSE).
+
 ## Feedback
 
 When something looks wrong, a screenshot plus the file type and approximate window (for example `chrM 7,900–8,100`) helps most.
