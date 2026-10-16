@@ -86,9 +86,9 @@ export function renderTrackPanel(panelEl, trackList, cb) {
       max.addEventListener('change', () => cb.onYScale(track.id, { max: numOrNull(max.value) }))
       const bins = h('input', { type: 'number', min: 0, step: 50, value: track.binCount, title: '0 = automatic' })
       bins.addEventListener('change', () => cb.onBinCount(track.id, Math.max(0, Math.round(Number(bins.value) || 0))))
-      const smooth = h('input', { type: 'range', min: 0, max: 2000, step: 10, value: track.smooth, title: 'Gaussian smoothing width (bp, 0 = off)' })
-      const smoothVal = h('span', { textContent: track.smooth ? `${track.smooth} bp` : 'off' })
-      smooth.addEventListener('input', () => { smoothVal.textContent = Number(smooth.value) ? `${smooth.value} bp` : 'off'; cb.onSmooth(track.id, Number(smooth.value)) })
+      const smooth = h('input', { type: 'range', min: 0, max: 2000, step: 10, value: track.smooth, title: 'Smoothing (0 = off)' })
+      const smoothVal = h('span', { textContent: cb.smoothLabel(track.smooth) })
+      smooth.addEventListener('input', () => { smoothVal.textContent = cb.smoothLabel(Number(smooth.value)); cb.onSmooth(track.id, Number(smooth.value)) })
       const sharpen = h('input', { type: 'range', min: 0, max: 100, step: 5, value: track.sharpen, title: 'Unsharp-mask sharpening (0 = off)' })
       const sharpenVal = h('span', { textContent: track.sharpen ? `${track.sharpen}%` : 'off' })
       sharpen.addEventListener('input', () => { sharpenVal.textContent = Number(sharpen.value) ? `${sharpen.value}%` : 'off'; cb.onSharpen(track.id, Number(sharpen.value)) })
@@ -104,7 +104,7 @@ export function renderTrackPanel(panelEl, trackList, cb) {
         h('div', { className: 'row small' }, mode, min, max),
         h('div', { className: 'row small' }, 'bins', bins, '(0 = auto)'),
         h('div', { className: 'row small' }, 'smooth', smooth, smoothVal),
-        h('div', { className: 'row small' }, 'sharpen', sharpen, sharpenVal)
+        ...(cb.bars() ? [] : [h('div', { className: 'row small' }, 'sharpen', sharpen, sharpenVal)])
       )
     }
     adv.append(opts)

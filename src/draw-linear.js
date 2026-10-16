@@ -3,7 +3,7 @@
 import { el, text, onColor, fmtVal, prepareSignalBands, resolveScale, Y_HEADROOM } from './draw.js'
 import { ringOwners } from './tracks.js'
 import { rulerTicks, niceStep, visibleSegments } from './render.js'
-import { KBRO_BASE_VAR } from './signal.js'
+import { BASE_VAR } from './signal.js'
 import { xOf, computeLinearBands, signalPathLinear, zeroLineY, featurePath } from './linear.js'
 
 export const LEFT = 150 // gutter for track names
@@ -15,7 +15,7 @@ const END_LABEL_PAD = 70 // tick labels keep this far from the window-end labels
 // "50 bp", "2 kb", "1.5 Mb": distance between two grid lines.
 const formatDist = (bp) => (bp >= 1e6 ? `${+(bp / 1e6).toFixed(2)} Mb` : bp >= 1e3 ? `${+(bp / 1e3).toFixed(2)} kb` : `${+bp.toFixed(2)} bp`)
 const BOTTOM = 16
-const KBRO_READ_PT = 7.9 // kbro: one read = 8 pt high; 7.9 matches its per-read pixel heights on OrbiT (measured)
+const READ_PT = 7.9 // one read = 8 pt high; 7.9 matches the reference per-read pixel heights (measured)
 
 const clip = (s, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
@@ -82,12 +82,12 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   scene.bands = computeLinearBands(owners, { top: TOP, bottom: height - BOTTOM })
   const { bandMax, sharedMax } = prepareSignalBands(scene.bands, tracks, data)
   scene.bandMax = bandMax
-  const kb = !!ySettings?.kbro
+  const bars = !!ySettings?.bars
   let ys = ySettings || {}
-  if (kb) {
+  if (bars) {
     // Each band is scaled to the window you are looking at, so it follows you along the genome
-    // (with Y_HEADROOM to spare), unless the gain is held: `a` holds the fit of the current view,
-    // `f` holds kbro's own gain, where one read always draws KBRO_READ_PT high (the file's
+    // (with Y_HEADROOM to spare), unless the gain is held: `y` holds the fit of the current view,
+    // `h` holds the fixed gain, where one read always draws READ_PT high (the file's
     // smallest non-zero score is one read).
     // g = pt of height per unit of density (signal summed per pt); density = value x bp per pt.
     const bpPerPt = span / w
@@ -103,7 +103,7 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
         if (!full) ys.gain.set(id, gain)
       }
       const unit = ys.unit.get(id)
-      if (gain === undefined && ys.readGain && unit) gain = KBRO_READ_PT * Math.sqrt(2 * Math.PI * KBRO_BASE_VAR) / unit // peak density of one read = unit / (σ√2π)
+      if (gain === undefined && ys.readGain && unit) gain = READ_PT * Math.sqrt(2 * Math.PI * BASE_VAR) / unit // peak density of one read = unit / (σ√2π)
       if (gain === undefined) continue // auto
       locked.set(id, halfH / gain / bpPerPt / Y_HEADROOM) // resolveScale puts the headroom back
     }
@@ -115,7 +115,7 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
     const { track, top, bottom } = band
     const bandG = el('g', {}, g)
     el('rect', { x: x0, y: top, width: w, height: bottom - top, fill: theme.grid }, bandG)
-    if (kb) {
+    if (bars) {
       for (const t of rulerTicks(length, vs, span)) {
         const x = xOf(t.rel, span, x0, w)
         if (x >= x0 - 0.5 && x <= x0 + w + 0.5) el('line', { x1: x, y1: top, x2: x, y2: bottom, stroke: theme.muted, 'stroke-opacity': t.major ? 0.45 : 0.2, 'stroke-width': t.major ? 1.2 : 0.8 }, bandG)
@@ -131,7 +131,7 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
       if (scale.lo < 0) el('line', { x1: x0, y1: zeroLineY(band, scale), x2: x0 + w, y2: zeroLineY(band, scale), stroke: theme.muted, 'stroke-width': 0.5, 'stroke-dasharray': '2 2' }, bandG)
       const multi = band.members.length > 1
       for (const [bins, color] of band.layers) {
-        if (kb) el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.55 : 1 }, bandG) // kbro draws 1 pt bars; overlaid samples stay see-through
+        if (bars) el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.55 : 1 }, bandG) // 1 pt bars; overlaid samples stay see-through
         else el('path', { d: signalPathLinear(bins, band, vs, span, scale, x0, w), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
       }
       names = band.members.map((m) => m.track.name)

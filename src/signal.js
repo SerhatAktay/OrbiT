@@ -90,16 +90,15 @@ export function transformBins(bins, { smoothBp = 0, sharpenUi = 0, circular = fa
   return bins.map((b, i) => ({ ...b, value: out[i] }))
 }
 
-// kbro-style smoothing, measured from kbro itself (macOS points, so independent of zoom):
-// the signal is binned in 1 pt columns and blurred with a Gaussian. A lone read already has a
-// variance of 1.5 pt² (σ ≈ 1.2 pt; kbro's spike profile is 1 : 0.5 : 0.15 : 0.03 per column),
-// and each smoothing level adds 0.48 pt². Total signal is kept, so peaks get lower as they
-// widen (level 10 halves the peak height).
-export const KBRO_BASE_VAR = 1.5
-export const KBRO_LEVEL_VAR = 0.48
-export function kbroBins(bins, { level = 0, ptPerBin = 1, abs = false } = {}) {
+// Gaussian style: signal is binned in screen points (1 per column) and blurred with a Gaussian, so it looks
+// the same at any zoom. A lone read already has a variance of 1.5 pt² (σ ≈ 1.2 pt; spike
+// profile 1 : 0.5 : 0.15 : 0.03 per column), and each smoothing level adds 0.48 pt². Total
+// signal is kept, so peaks get lower as they widen (level 10 halves the peak height).
+export const BASE_VAR = 1.5
+export const LEVEL_VAR = 0.48
+export function gaussBins(bins, { level = 0, ptPerBin = 1, abs = false } = {}) {
   if (!bins.length) return bins
-  const sigma = Math.sqrt(KBRO_BASE_VAR + KBRO_LEVEL_VAR * level) / ptPerBin
+  const sigma = Math.sqrt(BASE_VAR + LEVEL_VAR * level) / ptPerBin
   const half = Math.ceil(4 * sigma)
   const kernel = new Float64Array(2 * half + 1)
   for (let k = -half; k <= half; k++) kernel[half + k] = Math.exp(-0.5 * (k / sigma) ** 2)

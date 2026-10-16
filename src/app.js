@@ -21,7 +21,7 @@ import {
   packLanes,
 } from './tracks.js'
 import { openBigWig, getBinnedValues } from './parse-bigwig.js'
-import { transformBins, kbroBins } from './signal.js'
+import { transformBins, gaussBins } from './signal.js'
 import { parseAnnotation, parseGenBank, parseGtfLines, normChrom, compareChroms } from './parse-annotation.js'
 import { drawScene, fmtVal } from './draw.js'
 import { drawLinear, LEFT } from './draw-linear.js'
@@ -50,11 +50,11 @@ let trackList = []
 let scene = null
 let lastAutoBins = 600
 let mode = 'linear' // or 'circular'
-const NT_MAX_SPAN = 4000 // windows up to this many bp show every nucleotide by default
-// Global Y controls (ProBrow): shared symmetric max, zoom factor, locked autoscale.
-// kbro (the default linear style): unit = one read's score per track; gain = held pt-per-density
-// (a = fit the current view, f = kbro's fixed read height); fit = refit on the next draw.
-const ySettings = { shared: false, factor: 1, locked: null, kbro: true, readGain: false, unit: new Map(), gain: new Map(), fit: false }
+const NT_MAX_SPAN = 4000 // area style: windows up to this many bp show every nucleotide by default
+// Global Y controls: shared symmetric max, zoom factor, locked autoscale. `bars` is the default
+// style (Gaussian bars); off = area outline. Bars, linear: unit = one read's score per track;
+// gain = held pt-per-density (a = fit the current view, f = fixed read height); fit = refit on the next draw.
+const ySettings = { shared: false, factor: 1, locked: null, bars: true, readGain: false, unit: new Map(), gain: new Map(), fit: false }
 const bigWigHandles = new Map() // trackId -> { chromSizes, single } | { chromSizes, plus, minus }
 
 // ---- helpers ---------------------------------------------------------------
@@ -132,20 +132,22 @@ async function fetchSignal(track, handle, autoBins) {
   const { start: viewStart, span: viewSpan } = genome.view
   // Short windows default to one bin per nucleotide on integer bp edges, so no bin
   // blends two neighbouring bases. A manual bin count (track.binCount) wins.
-  const nt = !track.binCount && !kbro() && viewSpan <= NT_MAX_SPAN
+  const nt = !track.binCount && !ySettings.bars && viewSpan <= NT_MAX_SPAN
   const start = nt ? Math.floor(viewStart) : viewStart
   const span = nt ? Math.ceil(viewStart + viewSpan) - start : viewSpan
   const n = nt ? span : Math.max(1, Math.min(track.binCount || autoBins, Math.ceil(span)))
   const load = (reader) => {
     const chrom = resolveChrom(handle.chromSizes, genome.name)
     if (!chrom) return Promise.resolve(Array.from({ length: n }, (_, i) => ({ start: start + (i * span) / n, end: start + ((i + 1) * span) / n, value: 0 })))
-    return getBinnedValues(reader, chrom, start, start + span, n, genome.length, kbro() && viewSpan <= 2e6)
+    return getBinnedValues(reader, chrom, start, start + span, n, genome.length, viewSpan <= 2e6)
   }
   const fx = { smoothBp: track.smooth || 0, sharpenUi: track.sharpen || 0, circular: viewSpan >= genome.length }
-  const plotW = Math.max(50, svg.clientWidth - LEFT - 20) // 20 = RIGHT margin in draw-linear
-  // kbro: smoothing is a level (the slider value / 10) applied in screen pixels, not bp.
-  const tf = kbro()
-    ? (bins, abs) => kbroBins(bins, { level: Math.round((track.smooth || 0) / 10), ptPerBin: plotW / bins.length, abs })
+  // Bars: smoothing is a level (the slider value / 10) applied in screen pixels, not bp.
+  const plotLen = mode === 'linear'
+    ? Math.max(50, svg.clientWidth - LEFT - 20) // 20 = RIGHT margin in draw-linear
+    : TAU * (Math.min(svg.clientWidth, svg.clientHeight) / 2 - 48) // outer ring
+  const tf = ySettings.bars
+    ? (bins, abs) => gaussBins(bins, { level: Math.round((track.smooth || 0) / 10), ptPerBin: plotLen / bins.length, abs })
     : (bins, abs) => transformBins(bins, { ...fx, abs })
   if (track.strand === 'paired') {
     const [plusBins, minusBins] = await Promise.all([load(handle.plus), load(handle.minus)])
@@ -161,7 +163,7 @@ async function render() {
   const height = svg.clientHeight
   const visible = visibleTracksInOrder(trackList).map((t) => (t.type === 'annotation' ? annotationForChrom(t) : t))
   const autoBins = mode === 'linear'
-    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.kbro ? 1 : 2)))) // kbro: one bin per pt, smoothed in pt
+    ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.bars ? 1 : 2)))) // bars: one bin per pt, smoothed in pt
     : Math.max(180, Math.min(2000, Math.round((TAU * (Math.min(width, height) / 2 - 48)) / 2.5)))
   lastAutoBins = autoBins
 
@@ -183,11 +185,13 @@ async function render() {
   scene = (mode === 'linear' ? drawLinear : drawScene)(viewport, { width, height, genome, tracks: visible, data, theme: theme(), ySettings })
   overlay.replaceChildren()
   $('empty').style.display = trackList.length ? 'none' : 'flex'
-  const flags = [ySettings.shared && 'shared Y', ySettings.locked && 'Y locked', ySettings.factor !== 1 && `Y ×${ySettings.factor.toFixed(2)}`].filter(Boolean)
+  const flags = [!ySettings.bars && ySettings.shared && 'shared Y', (ySettings.locked || ySettings.gain.size) && 'Y held', ySettings.readGain && 'fixed read height', ySettings.factor !== 1 && `Y ×${ySettings.factor.toFixed(2)}`].filter(Boolean)
   status.textContent = [isFullView(genome) ? '' : `${Math.round(genome.view.span).toLocaleString('en-US')} bp window`, ...flags].filter(Boolean).join(' · ')
   syncGlobals()
   if (afterRender) { const f = afterRender; afterRender = null; f() }
 }
+
+const smoothLabel = (v) => (!v ? 'off' : ySettings.bars ? `level ${Math.round(v / 10)}` : `${v} bp`)
 
 // Global bar mirrors the signal tracks (first track's value) and the Y settings.
 function syncGlobals() {
@@ -195,11 +199,14 @@ function syncGlobals() {
   $('globals').hidden = !sig.length
   if (!sig.length) return
   $('g-smooth').value = sig[0].smooth
-  $('g-smooth-v').textContent = sig[0].smooth ? (kbro() ? `level ${Math.round(sig[0].smooth / 10)}` : `${sig[0].smooth} bp`) : 'off'
+  $('g-smooth-v').textContent = smoothLabel(sig[0].smooth)
+  $('g-bars').checked = ySettings.bars
+  $('g-sharpen').parentElement.hidden = ySettings.bars // sharpen and shared Y only apply to the area style
+  $('g-shared').parentElement.hidden = ySettings.bars
   $('g-sharpen').value = sig[0].sharpen
   $('g-sharpen-v').textContent = sig[0].sharpen ? `${sig[0].sharpen}%` : 'off'
   $('g-shared').checked = ySettings.shared
-  $('g-lock').checked = !!ySettings.locked
+  $('g-lock').checked = !!ySettings.locked || ySettings.gain.size > 0
 }
 
 // ---- file loading ----------------------------------------------------------
@@ -246,7 +253,7 @@ async function openEntry(entry) {
   })
   const units = Object.values(opened).map((o) => o.unit).filter(Boolean)
   if (units.length) ySettings.unit.set(track.id, Math.min(...units))
-  // PRO-seq default: first stranded pair turns on one shared Y range across samples.
+  // PRO-seq default: first stranded pair turns on one shared Y range across samples (area style).
   if (paired && !trackList.some((t) => t.strand === 'paired')) ySettings.shared = true
   trackList = addTrack(trackList, track)
 }
@@ -434,6 +441,8 @@ function rebuildPanel() {
     onBinCount: (id, n) => update(setBinCount(trackList, id, n)),
     onSmooth: (id, bp) => update(setTrackProp(trackList, id, { smooth: bp })),
     onSharpen: (id, v) => update(setTrackProp(trackList, id, { sharpen: v })),
+    smoothLabel,
+    bars: () => ySettings.bars,
     onOverlay: (id, otherId) => {
       const other = trackList.find((t) => t.id === otherId)
       const size = other?.group ? trackList.filter((t) => t.group === other.group).length : 1
@@ -643,8 +652,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 function patchSignals(fn) {
   update(trackList.map((t) => (t.type === 'signal' ? { ...t, ...fn(t) } : t)), { rebuild: true })
 }
-const kbro = () => ySettings.kbro && mode === 'linear'
-const stepSmooth = (bp, up) => kbro() ? clamp(bp + (up ? 10 : -10), 0, 2000) : (up ? clamp(bp ? Math.round(bp * 1.5) : 50, 0, 2000) : bp <= 50 ? 0 : Math.round(bp / 1.5))
+const stepSmooth = (v, up) => ySettings.bars ? clamp(v + (up ? 10 : -10), 0, 2000) : (up ? clamp(v ? Math.round(v * 1.5) : 50, 0, 2000) : v <= 50 ? 0 : Math.round(v / 1.5))
 const helpEl = $('help')
 function setMode(next) {
   mode = next
@@ -655,37 +663,38 @@ function setMode(next) {
   $('pos').textContent = ''
   requestRender()
 }
+const toggleStyle = () => { ySettings.bars = !ySettings.bars; ySettings.gain.clear(); rebuildPanel(); requestRender() }
 const toggleMode = () => setMode(mode === 'linear' ? 'circular' : 'linear')
 $('mode-btn').addEventListener('click', toggleMode)
 const KEYS = {
   v: toggleMode,
   r: () => { genome = resetView(genome); ySettings.gain.clear(); requestRender() },
-  j: () => { ySettings.kbro = !ySettings.kbro; ySettings.gain.clear(); requestRender() },
-  f: () => { if (kbro()) { ySettings.readGain = !ySettings.readGain; ySettings.gain.clear(); requestRender() } }, // kbro's fixed read height
+  t: toggleStyle,
+  h: () => { if (ySettings.bars && mode === 'linear') { ySettings.readGain = !ySettings.readGain; ySettings.gain.clear(); requestRender() } }, // fixed read height
   '[': () => { ySettings.factor = clamp(ySettings.factor / 1.25, 0.1, 10); requestRender() },
   ']': () => { ySettings.factor = clamp(ySettings.factor * 1.25, 0.1, 10); requestRender() },
-  a: () => {
+  y: () => {
     ySettings.locked = null
     ySettings.gain.clear()
-    if (kbro()) { ySettings.fit = true; requestRender(); return } // kbro: refit on the next draw
+    if (ySettings.bars && mode === 'linear') { ySettings.fit = true; requestRender(); return } // refit on the next draw
     afterRender = () => { ySettings.locked = new Map(scene.bandMax); requestRender() }
     requestRender()
   },
-  // kbro's own keys: zoom and pan in fixed steps around the view centre (linear kbro mode only).
-  z: () => kbro() && (genome = zoomAt(genome, 0.8, 0.5), requestRender()),
-  x: () => kbro() && (genome = zoomAt(genome, 1.25, 0.5), requestRender()),
-  '.': () => kbro() && (genome = panBy(genome, genome.view.span * 0.125), requestRender()),
-  ',': () => kbro() && (genome = panBy(genome, -genome.view.span * 0.125), requestRender()),
-  '>': () => kbro() && (genome = panBy(genome, genome.view.span * 0.5), requestRender()),
-  '<': () => kbro() && (genome = panBy(genome, -genome.view.span * 0.5), requestRender()),
-  q: () => kbro() && KEYS['['](),
-  w: () => kbro() && KEYS[']'](),
-  A: () => { ySettings.locked = null; ySettings.gain.clear(); requestRender() },
-  p: () => { ySettings.shared = !ySettings.shared; requestRender() },
+  // Zoom and pan in fixed steps around the view centre.
+  '+': () => (genome = zoomAt(genome, 0.8, 0.5), requestRender()),
+  '=': () => KEYS['+'](),
+  '-': () => (genome = zoomAt(genome, 1.25, 0.5), requestRender()),
+  ArrowRight: (e) => (genome = panBy(genome, genome.view.span * (e.shiftKey ? 0.5 : 0.125)), requestRender()),
+  ArrowLeft: (e) => (genome = panBy(genome, -genome.view.span * (e.shiftKey ? 0.5 : 0.125)), requestRender()),
+  ArrowUp: () => KEYS[']'](),
+  ArrowDown: () => KEYS['['](),
+  p: () => { if (!ySettings.bars) { ySettings.shared = !ySettings.shared; requestRender() } },
+  Y: () => { ySettings.locked = null; ySettings.gain.clear(); requestRender() },
+  p: () => { if (!ySettings.bars) { ySettings.shared = !ySettings.shared; requestRender() } },
   s: () => patchSignals((t) => ({ smooth: stepSmooth(t.smooth, false) })),
   S: () => patchSignals((t) => ({ smooth: stepSmooth(t.smooth, true) })),
-  k: () => patchSignals((t) => ({ sharpen: clamp(t.sharpen - 10, 0, 100) })),
-  K: () => patchSignals((t) => ({ sharpen: clamp(t.sharpen + 10, 0, 100) })),
+  k: () => { if (!ySettings.bars) patchSignals((t) => ({ sharpen: clamp(t.sharpen - 10, 0, 100) })) },
+  K: () => { if (!ySettings.bars) patchSignals((t) => ({ sharpen: clamp(t.sharpen + 10, 0, 100) })) },
   b: () => patchSignals((t) => ({ binCount: clamp(Math.round((t.binCount || lastAutoBins) / 1.5), 50, 5000) })),
   B: () => patchSignals((t) => ({ binCount: clamp(Math.round((t.binCount || lastAutoBins) * 1.5), 50, 5000) })),
   '?': () => { helpEl.hidden = !helpEl.hidden },
@@ -695,7 +704,8 @@ document.addEventListener('keydown', (e) => {
   if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || e.metaKey || e.ctrlKey || e.altKey) return
   const key = e.key.length === 1 && e.key.toLowerCase() === 'r' ? 'r' : e.key
   if (!KEYS[key] || (!genome && key !== '?' && key !== 'Escape')) return
-  KEYS[key]()
+  e.preventDefault() // arrows and +/- would otherwise scroll or zoom the page
+  KEYS[key](e)
 })
 // Global bar: sliders apply to every signal track; rebuild the panel only when released.
 const setAllSignals = (patch, rebuild) => update(trackList.map((t) => (t.type === 'signal' ? { ...t, ...patch } : t)), { rebuild })
@@ -704,7 +714,8 @@ for (const [id, key] of [['g-smooth', 'smooth'], ['g-sharpen', 'sharpen']]) {
   $(id).addEventListener('change', rebuildPanel)
 }
 $('g-shared').addEventListener('change', (e) => { ySettings.shared = e.target.checked; requestRender() })
-$('g-lock').addEventListener('change', (e) => (e.target.checked ? KEYS.a() : KEYS.A()))
+$('g-bars').addEventListener('change', toggleStyle)
+$('g-lock').addEventListener('change', (e) => (e.target.checked ? KEYS.y() : KEYS.Y()))
 $('g-ydown').addEventListener('click', KEYS['['])
 $('g-yup').addEventListener('click', KEYS[']'])
 $('help-btn').addEventListener('click', () => { helpEl.hidden = !helpEl.hidden })
@@ -717,7 +728,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', requestRen
 // The full linear view has no rotation, so it always starts at bp 1.
 const setGenome = (next) => { genome = mode === 'linear' && isFullView(next) ? resetView(next) : next; requestRender() }
 attachZoomPan(svg, () => (mode === 'circular' ? genome : null), setGenome, onSvgClick)
-attachLinearZoomPan(svg, () => (mode === 'linear' ? genome : null), () => scene?.plot, setGenome, onSvgClick, kbro)
+attachLinearZoomPan(svg, () => (mode === 'linear' ? genome : null), () => scene?.plot, setGenome, onSvgClick, () => ySettings.bars)
 rebuildPanel()
 
 // Test/debug hook.

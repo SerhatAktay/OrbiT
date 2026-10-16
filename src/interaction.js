@@ -37,7 +37,7 @@ export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick
     if (!genome || !getPlot()) return
     event.preventDefault()
     if (discrete()) {
-      // kbro: one wheel flick = one 25% step (x0.8 in, x1.25 out) at the cursor; trackpad
+      // One wheel flick = one 25% step (x0.8 in, x1.25 out) at the cursor; trackpad
       // inertia is throttled so zooming stays in clean steps.
       acc += event.deltaY
       if (Math.abs(acc) < 40 || event.timeStamp - lastStep < 90) return

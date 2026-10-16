@@ -30,8 +30,8 @@ export function createSignalTrack({
     weight: strand === 'paired' ? 1.6 : 1.2,
     yScale: { mode: 'auto', min: null, max: null },
     binCount,
-    smooth: 0, // bp, 0 = off
-    sharpen: 0, // 0..100
+    smooth: 0, // bars: level x 10; area: bp. 0 = off
+    sharpen: 0, // 0..100 (area style)
     group: null, // tracks sharing a group id draw on one ring
     genomeLength,
   }

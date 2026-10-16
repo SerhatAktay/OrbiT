@@ -95,20 +95,19 @@
       <div id="help" hidden>
         <h2>Shortcuts <button id="help-close" style="float:right">×</button></h2>
         <b>Mouse</b><br />
-        scroll: zoom at cursor · drag: rotate<br />
+        scroll: zoom at cursor · drag: pan (rotate in circular view)<br />
         double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it<br />
         <b>Keyboard</b><br />
         <kbd>/</kbd> search · <kbd>R</kbd> reset view · <kbd>V</kbd> circular / linear · <kbd>?</kbd> this panel · <kbd>Esc</kbd> close<br />
-        <kbd>j</kbd> kbro style (linear, default): Gaussian bars, grid lines, Y fitted to what you see<br />
-        &nbsp;&nbsp;<kbd>a</kbd> hold the Y scale of this view · <kbd>Shift</kbd>+<kbd>a</kbd> back to auto · <kbd>f</kbd> kbro's fixed read height<br />
-        Double-click a sample name in the panel to rename it<br />
-        &nbsp;&nbsp;kbro keys: <kbd>z</kbd> <kbd>x</kbd> zoom in / out 25% · <kbd>,</kbd> <kbd>.</kbd> pan 12% · <kbd>&lt;</kbd> <kbd>&gt;</kbd> pan 50% · <kbd>q</kbd> <kbd>w</kbd> Y scale · <kbd>S</kbd> <kbd>s</kbd> smooth level up / down<br />
-        <kbd>[</kbd> <kbd>]</kbd> Y scale down / up<br />
-        <kbd>a</kbd> fit Y to view and lock · <kbd>Shift</kbd>+<kbd>a</kbd> unlock<br />
-        <kbd>p</kbd> shared vs per-track Y scale<br />
+        <kbd>+</kbd> <kbd>-</kbd> zoom in / out 25% · <kbd>←</kbd> <kbd>→</kbd> pan 12% (<kbd>Shift</kbd> 50%)<br />
+        <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>]</kbd> <kbd>[</kbd> Y scale up / down<br />
+        <kbd>y</kbd> autoscale Y to this view and hold it (press again in a new place to refit) · <kbd>Shift</kbd>+<kbd>y</kbd> let Y follow the view again<br />
         <kbd>s</kbd> <kbd>S</kbd> smooth less / more (all tracks)<br />
-        <kbd>k</kbd> <kbd>K</kbd> sharpen less / more (all tracks)<br />
-        <kbd>b</kbd> <kbd>B</kbd> fewer / more bins (all tracks)
+        <kbd>b</kbd> <kbd>B</kbd> fewer / more bins (all tracks)<br />
+        <kbd>t</kbd> bars (default) / area outline<br />
+        <b>Bars only</b>: <kbd>h</kbd> fixed height per read (linear)<br />
+        <b>Area only</b>: <kbd>p</kbd> shared Y · <kbd>k</kbd> <kbd>K</kbd> sharpen less / more<br />
+        Double-click a sample name in the panel to rename it
       </div>
       <div id="status"></div>
       <div id="pos"></div>
@@ -119,7 +118,8 @@
         <div class="row small">sharpen <input id="g-sharpen" type="range" min="0" max="100" step="5" title="All signal tracks (k / K)" /><span id="g-sharpen-v"></span></div>
         <div class="row small">
           <label title="One Y range for all samples (p)"><input id="g-shared" type="checkbox" /> shared Y</label>
-          <label title="Freeze Y while moving (a / Shift+A)"><input id="g-lock" type="checkbox" /> lock</label>
+          <label title="Bars (Gaussian, default) or area outline (t)"><input id="g-bars" type="checkbox" /> bars</label>
+          <label title="Freeze Y while moving (y / Shift+Y)"><input id="g-lock" type="checkbox" /> lock</label>
           <span class="spacer"></span>
           <button id="g-ydown" title="Y scale down ([)">Y−</button><button id="g-yup" title="Y scale up (])">Y+</button>
         </div>

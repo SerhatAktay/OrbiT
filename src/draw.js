@@ -139,7 +139,7 @@ export function drawScene(root, { width, height, genome, tracks, data, theme, yS
   const owners = ringOwners(tracks)
   scene.bands = computeTrackBands(owners, { minRadius: minRadius + 34, maxRadius, bandGap: 4 })
   const fs = 10
-  const ys = ySettings || {}
+  const ys = ySettings?.bars ? { ...ySettings, shared: false } : ySettings || {}
 
   const { bandMax, sharedMax } = prepareSignalBands(scene.bands, tracks, data)
   scene.bandMax = bandMax
@@ -159,7 +159,8 @@ export function drawScene(root, { width, height, genome, tracks, data, theme, yS
       if (scale.lo < 0) el('circle', { r: zero, fill: 'none', stroke: theme.muted, 'stroke-width': 0.5, 'stroke-dasharray': '2 2' }, bandG)
       const multi = band.members.length > 1
       for (const [bins, color] of band.layers) {
-        el('path', { d: signalPath(bins, band, vs, span, scale), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
+        if (ys.bars) el('path', { d: signalPath(bins, band, vs, span, scale), fill: color, 'fill-opacity': multi ? 0.55 : 1 }, bandG) // overlaid samples stay see-through
+        else el('path', { d: signalPath(bins, band, vs, span, scale), fill: color, 'fill-opacity': multi ? 0.5 : 0.75, stroke: color, 'stroke-width': 0.5, 'stroke-linejoin': 'round' }, bandG)
       }
       caption = band.members.map((m) => m.track.name).join(' + ') || caption
       caption = `${caption.length > 22 ? `${caption.slice(0, 21)}…` : caption}  ${fmtVal(scale.lo)}…${fmtVal(scale.hi)}`

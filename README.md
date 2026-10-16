@@ -61,6 +61,8 @@ Small test files (`chrM.plus.bw`, `chrM.minus.bw`, `sample.bed`) are in [`test/f
 | Hover | position, feature, or signal value |
 | `v` | switch circular / linear |
 | `R` | reset view |
+| `+` / `-` | zoom in / out 25% |
+| `←` / `→` | pan 12% (`Shift`: 50%) |
 | `?` | list all shortcuts |
 
 ## Signal controls
@@ -69,12 +71,13 @@ The bar at the top of the side panel applies to all signal tracks:
 
 | Control | Key | What it does |
 | --- | --- | --- |
-| smooth | `s` / `S` | smoothing window in bp, peak-preserving. Off by default. |
-| sharpen | `k` / `K` | adds fine detail back on top of the smoothing |
-| shared Y | `p` | one Y range for all tracks |
-| lock | `a` / `A` | freeze Y while you move around |
-| Y− / Y+ | `[` / `]` | shrink / grow the Y range |
-| bins | `b` / `B` | fewer / more bins. Default is automatic: one bin per nucleotide when the window is 4 kb or less, otherwise about one bin per 2 screen pixels. |
+| smooth | `s` / `S` | bars: Gaussian smoothing level, in screen points so it looks the same at any zoom. Area: window in bp. Off by default. |
+| sharpen | `k` / `K` | area style only: adds fine detail back on top of the smoothing |
+| shared Y | `p` | area style only: one Y range for all tracks |
+| style | `t` | bars (default) or area outline |
+| lock | `y` / `Y` | freeze Y while you move around |
+| Y− / Y+ | `↓` `↑` or `[` `]` | shrink / grow the Y range |
+| bins | `b` / `B` | fewer / more bins. Default is automatic: one bin per screen point in linear bars, otherwise about one per 2 screen pixels (area style: one per nucleotide at 4 kb or less). |
 
 Signal is drawn as one flat bar per bin, with no interpolation between bins. Strand pairs use a symmetric Y range by default.
 
