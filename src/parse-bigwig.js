@@ -15,6 +15,31 @@ export async function openBigWig(filehandle) {
   return { chromSizes, handle: bigwig, unit }
 }
 
+// bedGraph (text: chrom start end value), read whole: fine for small genomes.
+// Returns the same shape as openBigWig. Chrom sizes are only the largest end seen.
+// ponytail: getFeatures scans linearly; add a sorted index if big genomes ever matter.
+export async function openBedGraph(file) {
+  let stream = file.stream()
+  if (/\.gz$/i.test(file.name)) stream = stream.pipeThrough(new DecompressionStream('gzip'))
+  const text = await new Response(stream).text()
+  const byChrom = new Map()
+  const chromSizes = {}
+  let unit = Infinity
+  for (const line of text.split('\n')) {
+    if (!line || /^(#|track|browser)/.test(line)) continue
+    const [chrom, s, e, v] = line.trim().split(/\s+/)
+    const start = Number(s), end = Number(e), score = Number(v)
+    if (!chrom || !Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(score)) throw new Error(`bad bedGraph line: "${line.slice(0, 60)}"`)
+    if (!byChrom.has(chrom)) byChrom.set(chrom, [])
+    byChrom.get(chrom).push({ start, end, score })
+    chromSizes[chrom] = Math.max(chromSizes[chrom] ?? 0, end)
+    if (score !== 0) unit = Math.min(unit, Math.abs(score))
+  }
+  if (!byChrom.size) throw new Error('no bedGraph data lines found')
+  const handle = { getFeatures: async (chrom, from, to) => (byChrom.get(chrom) ?? []).filter((f) => f.end > from && f.start < to) }
+  return { chromSizes, handle, unit: Number.isFinite(unit) ? unit : null, approxSizes: true }
+}
+
 // Mean signal in `binCount` equal bins over [start, end). `end` may exceed the
 // chromosome length: the window then wraps round the origin (circular genome),
 // and bin starts stay in window coordinates (start + i*binSize, may be > length).

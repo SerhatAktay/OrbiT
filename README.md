@@ -1,6 +1,10 @@
+<p align="center"><img src="icon.png" alt="OrbiT logo" width="96" /></p>
+
 # OrbiT
 
 Interactive viewer for small circular genomes (mitochondria first), built around strand-specific PRO-seq style signal. It has a circular view and a linear view of the same data. Everything runs locally in your browser: no upload, no backend.
+
+**Try it online:** <https://serhataktay.github.io/OrbiT/> (nothing to install). Or run it locally, below.
 
 ## Install and run
 
@@ -40,10 +44,13 @@ This opens OrbiT in your default browser (<http://localhost:8765>). If it does n
 
 Drop files on the page, or click **Open files…**. You can mix types.
 
-- **bigWig** (`.bw`). Name a strand pair `x.plus.bw` + `x.minus.bw` (also `pos/neg`, `fwd/rev`, `fw/rv`) and they merge into one mirrored track: plus above the baseline, minus below, two colours.
+- **bigWig** (`.bw`, `.bigwig`). Name a strand pair `x.plus.bw` + `x.minus.bw` (also `pos/neg`, `fwd/rev`, `fw/rv`) and they merge into one mirrored track: plus above the baseline, minus below, two colours. Opening the second strand file later pairs it with the first automatically. A single signed bigWig (minus stored as negative values) also works, as one colour.
+- **bedGraph** (`.bedGraph`, `.bdg`, `.bg`, also `.gz`). Same strand-pair naming as bigWig (a bedGraph can pair with a bigWig). Read whole into memory, so it suits small genomes; use bigWig for large ones. Negative values draw below the baseline.
 - **Annotation** (`.bed`, `.gtf`, `.gff`, `.gff3`, `.gb`/`.gbk`/`.gbff`). GenBank joins that cross the origin stay one feature. Overlaps get separate lanes, arrows show strand, names appear when they fit.
 
-Chromosome names `chrM`, `MT` and `M` count as the same. If a bigWig has several chromosomes, a selector appears in the header.
+Chromosome names `chrM`, `MT` and `M` count as the same. If a signal file has several chromosomes, a selector appears in the header.
+
+BAM, CRAM and wig are not read; convert to bigWig or bedGraph first (for example with `bamCoverage`). OrbiT does no normalisation, so scale samples (CPM, spike-ins) before loading if you compare them.
 
 Small test files (`chrM.plus.bw`, `chrM.minus.bw`, `sample.bed`) are in [`test/fixtures/`](../../tree/dev/test/fixtures) on the `dev` branch.
 
@@ -63,7 +70,7 @@ Small test files (`chrM.plus.bw`, `chrM.minus.bw`, `sample.bed`) are in [`test/f
 | `R` | reset view |
 | `+` / `-` | zoom in / out 25% |
 | `←` / `→` | pan 12% (`Shift`: 50%) |
-| `?` | list all shortcuts |
+| `?` | shortcuts and About (citation info) |
 
 ## Signal controls
 
@@ -90,12 +97,19 @@ Each track card has visibility, colour, order (drag the `⠿` handle or use ↑/
 
 ## Known limits
 
+- Plus/minus is taken from the filename. Stranded RNA-seq (dUTP) puts reads on the opposite strand to the gene, so name files by transcript strand.
 - Checked in desktop Chromium only. Other browsers should work but are untested.
-- The auto Y range follows the tallest bin, so one spike can flatten the rest. Use Y−/Y+ or a fixed range.
+- The auto Y range follows the tallest bin, so one spike can flatten the rest. Use Y−/Y+ or a fixed range. There is no log or sqrt scale yet.
 
 ## Development
 
 Tests, specs and build scripts live on the [`dev` branch](../../tree/dev).
+
+## Citing
+
+A paper is in preparation. Until it is out, please cite the GitHub page:
+
+> Aktay, S. OrbiT. https://github.com/SerhatAktay/OrbiT
 
 ## Feedback
 

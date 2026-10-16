@@ -19,9 +19,10 @@ import {
   checkGenomeLengthMismatch,
   pairBigWigFiles,
   strandInfo,
+  SIGNAL_EXT,
   packLanes,
 } from './tracks.js'
-import { openBigWig, getBinnedValues } from './parse-bigwig.js'
+import { openBigWig, openBedGraph, getBinnedValues } from './parse-bigwig.js'
 import { transformBins, gaussBins } from './signal.js'
 import { parseAnnotation, parseGenBank, parseGtfLines, normChrom, compareChroms } from './parse-annotation.js'
 import { drawScene, fmtVal } from './draw.js'
@@ -227,7 +228,11 @@ function addAnnotationTrack(name, features) {
 async function openEntry(entry) {
   const signals = entry.single ? { single: entry.single } : { plus: entry.plus, minus: entry.minus }
   const opened = {}
-  for (const [key, file] of Object.entries(signals)) opened[key] = await openBigWig(new BlobFile(file))
+  for (const [key, file] of Object.entries(signals)) opened[key] = /\.(bedgraph|bdg|bg)(\.gz)?$/i.test(file.name) ? await openBedGraph(file) : await openBigWig(new BlobFile(file))
+  // bedGraph has no header sizes: when a genome is already loaded, trust its length over the largest end seen.
+  if (genome && !genomeDerived) {
+    for (const o of Object.values(opened)) if (o.approxSizes) for (const c of Object.keys(o.chromSizes)) if (normChrom(c) === normChrom(genome.name)) o.chromSizes[c] = Math.max(o.chromSizes[c], genome.length)
+  }
   const first = Object.values(opened)[0]
   const chromName = Object.keys(first.chromSizes)[0]
   const length = first.chromSizes[chromName]
@@ -244,7 +249,7 @@ async function openEntry(entry) {
     strand: paired ? 'paired' : 'unstranded',
     color: PALETTE[count % PALETTE.length],
     colorMinus: PALETTE[(count + 1) % PALETTE.length],
-    genomeLength: length,
+    genomeLength: first.approxSizes ? null : length,
   })
   if (checkGenomeLengthMismatch(track, genome.length)) {
     showError(`"${entry.name}" chromosome length (${length.toLocaleString('en-US')}) differs from the loaded genome (${genome.length.toLocaleString('en-US')}); the tail is clipped or empty.`)
@@ -261,10 +266,10 @@ async function openEntry(entry) {
 }
 
 async function handleFiles(files) {
-  const bigwigs = files.filter((f) => /\.(bw|bigwig)$/i.test(f.name))
+  const bigwigs = files.filter((f) => SIGNAL_EXT.test(f.name))
   const annotations = files.filter((f) => /\.(bed|gtf|gff3?|gbk?|gbff|genbank)$/i.test(f.name))
   const known = new Set([...bigwigs, ...annotations])
-  for (const f of files) if (!known.has(f)) showError(`"${f.name}" isn't a bigWig (.bw) or annotation (.bed/.gtf/.gff) file.`)
+  for (const f of files) if (!known.has(f)) showError(`"${f.name}" isn't a signal (.bw/.bedGraph) or annotation (.bed/.gtf/.gff) file.`)
 
   // An opposite-strand file opened earlier pairs with a new one: pull the old file back in and drop its track.
   for (const f of [...bigwigs]) {

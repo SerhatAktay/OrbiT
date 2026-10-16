@@ -140,12 +140,13 @@ export function checkGenomeLengthMismatch(track, genomeLength) {
   return track.genomeLength != null && track.genomeLength !== genomeLength
 }
 
+export const SIGNAL_EXT = /\.(bw|bigwig|bedgraph|bdg|bg)(\.gz)?$/i
 const STRAND_TOKEN = /(^|[._-])(plus|minus|pos|neg|fwd|rev|forward|reverse|fw|rv)(?=[._-]|$)/i
 const PLUS_TOKENS = new Set(['plus', 'pos', 'fwd', 'forward', 'fw'])
 
 // { key, side } from a strand token in the filename, or null.
 export function strandInfo(file) {
-  const name = file.name.replace(/\.(bw|bigwig)$/i, '')
+  const name = file.name.replace(SIGNAL_EXT, '')
   const m = name.match(STRAND_TOKEN)
   if (!m) return null
   return { key: name.replace(STRAND_TOKEN, '').replace(/[._-]+$/, ''), side: PLUS_TOKENS.has(m[2].toLowerCase()) ? 'plus' : 'minus' }
@@ -154,7 +155,7 @@ export function strandInfo(file) {
 // Group bigWig files into strand pairs by filename (sample.plus.bw + sample.minus.bw).
 // Returns [{ name, single } | { name, plus, minus }]; a lone stranded file stays single.
 export function pairBigWigFiles(files) {
-  const base = (f) => f.name.replace(/\.(bw|bigwig)$/i, '')
+  const base = (f) => f.name.replace(SIGNAL_EXT, '')
   const groups = new Map()
   const out = []
   for (const file of files) {
