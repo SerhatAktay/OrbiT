@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OrbiT</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.png" />
   <style>
     :root { --bg: #ffffff; --fg: #1b1f24; --muted: #6b7280; --grid: #f0f2f5; --line: #d8dce2; --panel: #f8f9fb; --accent: #1f77b4; }
     @media (prefers-color-scheme: dark) {
@@ -12,7 +14,10 @@
     * { box-sizing: border-box; }
     body { margin: 0; height: 100vh; display: flex; flex-direction: column; font: 13px system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--fg); }
     header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
-    header h1 { font-size: 15px; margin: 0 8px 0 0; }
+    header h1 { font-size: 15px; margin: 0 8px 0 0; display: flex; align-items: center; gap: 7px; }
+    header h1 img { width: 24px; height: 24px; }
+    #help .about { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); line-height: 1.5; }
+    #help .about a { color: var(--accent); }
     button, select, input { font: inherit; color: inherit; }
     button, select { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 9px; cursor: pointer; }
     button:hover:not(:disabled) { border-color: var(--accent); }
@@ -62,7 +67,7 @@
 </head>
 <body>
   <header>
-    <h1>OrbiT</h1>
+    <h1><img src="icon.svg" alt="" />OrbiT</h1>
     <button id="open-files">Open files…</button>
     <input id="file-input" type="file" multiple hidden accept=".bw,.bigwig,.bed,.gtf,.gff,.gff3,.gb,.gbk,.gbff,.genbank" />
     <button id="fetch-annotation" title="Download a GenBank annotation from NCBI by accession or name">Fetch annotation…</button>
@@ -84,7 +89,7 @@
         <button data-export="html">HTML<small>single shareable file</small></button>
       </div>
     </div>
-    <button id="help-btn" title="Mouse and keyboard shortcuts (?)">Help</button>
+    <button id="help-btn" title="Shortcuts and about (?)">Help</button>
   </header>
   <main>
     <div id="canvas-area">
@@ -93,7 +98,7 @@
       <div id="empty">Drop bigWig (.bw) and annotation (.bed / .gtf / .gff) files here<br />Plus/minus strand pairs (<code>x.plus.bw</code> + <code>x.minus.bw</code>) merge automatically</div>
       <div id="tooltip"></div>
       <div id="help" hidden>
-        <h2>Shortcuts <button id="help-close" style="float:right">×</button></h2>
+        <h2>Help &amp; about <button id="help-close" style="float:right">×</button></h2>
         <b>Mouse</b><br />
         scroll: zoom at cursor · drag: pan (rotate in circular view)<br />
         double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it<br />
@@ -108,6 +113,13 @@
         <b>Bars only</b>: <kbd>h</kbd> fixed height per read (linear)<br />
         <b>Area only</b>: <kbd>p</kbd> shared Y · <kbd>k</kbd> <kbd>K</kbd> sharpen less / more<br />
         Double-click a sample name in the panel to rename it
+        <div class="about">
+          <b>About OrbiT</b><br />
+          Interactive viewer for small circular genomes (mitochondria first) with strand-specific PRO-seq style signal, in a circular and a linear view. Everything runs locally in your browser: your files are never uploaded.<br />
+          <b>Citing:</b> a paper is in preparation. Until it is out, please cite the GitHub page:<br />
+          Aktay, S. OrbiT. <a href="https://github.com/SerhatAktay/OrbiT" target="_blank" rel="noopener">github.com/SerhatAktay/OrbiT</a><br />
+          Version 0.1.0 · bugs and ideas: <a href="https://github.com/SerhatAktay/OrbiT/issues" target="_blank" rel="noopener">GitHub issues</a>
+        </div>
       </div>
       <div id="status"></div>
       <div id="pos"></div>
