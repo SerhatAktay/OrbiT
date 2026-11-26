@@ -6,11 +6,15 @@
   <title>OrbiT</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icon.png" />
+  <script>
+    // Set before first paint: the saved choice, else the system setting.
+    let savedTheme
+    try { savedTheme = localStorage.getItem('orbit-theme') } catch {}
+    document.documentElement.dataset.theme = savedTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  </script>
   <style>
-    :root { --bg: #ffffff; --fg: #1b1f24; --muted: #6b7280; --grid: #f0f2f5; --line: #d8dce2; --panel: #f8f9fb; --accent: #1f77b4; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #14171c; --fg: #e6e8eb; --muted: #9aa3ad; --grid: #1d2128; --line: #2e343c; --panel: #191d23; --accent: #5aa9e6; }
-    }
+    :root { color-scheme: light; --bg: #ffffff; --fg: #1b1f24; --muted: #6b7280; --grid: #f0f2f5; --line: #d8dce2; --panel: #f8f9fb; --accent: #1f77b4; }
+    :root[data-theme="dark"] { color-scheme: dark; --bg: #14171c; --fg: #e6e8eb; --muted: #9aa3ad; --grid: #1d2128; --line: #2e343c; --panel: #191d23; --accent: #5aa9e6; }
     * { box-sizing: border-box; }
     body { margin: 0; height: 100vh; display: flex; flex-direction: column; font: 13px system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--fg); }
     header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
@@ -89,6 +93,7 @@
         <button data-export="html">HTML<small>single shareable file</small></button>
       </div>
     </div>
+    <button id="theme-btn" title="Switch between light and dark mode (exports use the current one)"></button>
     <button id="help-btn" title="Shortcuts and about (?)">Help</button>
   </header>
   <main>

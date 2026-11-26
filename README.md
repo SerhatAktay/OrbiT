@@ -90,6 +90,7 @@ Each track card has visibility, colour, order (drag the `⠿` handle or use ↑/
 
 ## Export and sessions
 
+- **Dark mode / Light mode** (header button) follows the system setting until clicked, then remembers your choice. Exports use the current mode.
 - **SVG**, **PNG** (3x), or **HTML**: a single self-contained file with the current view inlined, easy to share.
 - **Save session / Load session** stores the view and track settings as JSON (not the data). Load the session, then open the same data files; tracks are matched by name, in either order.
 

@@ -788,7 +788,24 @@ $('g-yup').addEventListener('click', KEYS[']'])
 $('help-btn').addEventListener('click', () => { helpEl.hidden = !helpEl.hidden })
 $('help-close').addEventListener('click', () => { helpEl.hidden = true })
 new ResizeObserver(requestRender).observe(canvasArea)
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', requestRender)
+
+// Light / dark: follows the system until the button is clicked; index.html sets the initial value.
+function showTheme(name) {
+  document.documentElement.dataset.theme = name
+  $('theme-btn').textContent = name === 'dark' ? 'Light mode' : 'Dark mode'
+  requestRender() // the SVG takes its colours from the CSS variables at draw time
+}
+$('theme-btn').addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
+  try { localStorage.setItem('orbit-theme', next) } catch {}
+  showTheme(next)
+})
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  let saved
+  try { saved = localStorage.getItem('orbit-theme') } catch {}
+  if (!saved) showTheme(e.matches ? 'dark' : 'light')
+})
+showTheme(document.documentElement.dataset.theme)
 
 // getGenome is a getter: handlers are attached once, before any file loads.
 // Each attach is active only in its own mode (getGenome returns null otherwise).
