@@ -8,15 +8,21 @@ export const relAtX = (x, span, x0, w) => ((x - x0) / w) * span
 
 // Vertical stack of bands between top and bottom. Annotation bands take a fixed
 // height per lane; signal bands share the rest by weight (at least minSignal px each).
-export function computeLinearBands(tracks, { top, bottom, gap = 6, lane = 20, minSignal = 60 }) {
+// Together, annotation bands take at most annotationShare of the height (all of it
+// without signal tracks); past that, lanes get thinner.
+export function computeLinearBands(tracks, { top, bottom, gap = 6, lane = 20, minSignal = 60, annotationShare = 0.3 }) {
   const fixed = tracks.map((t) => (t.type === 'annotation' ? (t.laneCount || 1) * lane + 4 : 0))
-  const flex = tracks.filter((_, i) => !fixed[i])
+  const flex = tracks.filter((t) => t.type !== 'annotation')
+  const wanted = fixed.reduce((a, b) => a + b, 0)
+  const room = flex.length ? (bottom - top) * annotationShare : bottom - top - gap * tracks.length
+  const shrink = wanted > room ? Math.max(0, room) / wanted : 1
+  fixed.forEach((h, i) => { fixed[i] = h * shrink })
   const flexWeight = flex.reduce((s, t) => s + (t.weight || 1), 0)
   const used = fixed.reduce((a, b) => a + b, 0) + gap * tracks.length
   const free = Math.max(minSignal * flex.length, bottom - top - used)
   let y = top
   return tracks.map((track, i) => {
-    const h = fixed[i] || (free * (track.weight || 1)) / flexWeight
+    const h = track.type === 'annotation' ? fixed[i] : (free * (track.weight || 1)) / flexWeight
     const band = { track, top: y, bottom: y + h }
     y += h + gap
     return band

@@ -161,15 +161,17 @@ function drawLinearAnnotation(parent, band, genome, theme, x0, w) {
   const { length, view } = genome
   const { start: vs, span } = view
   const laneH = (band.bottom - band.top) / (track.laneCount || 1)
+  const pad = Math.min(1, laneH * 0.1) // thin lanes keep a positive feature height
+  const outline = Math.min(0.6, laneH * 0.1)
   band.hits = []
   for (const f of track.features) {
-    const top = band.top + (f.lane ?? 0) * laneH + 1
-    const bottom = top + laneH - 2
+    const top = band.top + (f.lane ?? 0) * laneH + pad
+    const bottom = top + laneH - 2 * pad
     for (const seg of visibleSegments(f, length, vs, span)) {
       const strand = f.strand === '+' && !seg.clippedEnd ? '+' : f.strand === '-' && !seg.clippedStart ? '-' : null
       const xa = xOf(seg.rel0, span, x0, w)
       const xb = xOf(seg.rel1, span, x0, w)
-      el('path', { d: featurePath(xa, xb, top, bottom, strand), fill: track.color, stroke: theme.bg, 'stroke-width': 0.6 }, parent)
+      el('path', { d: featurePath(xa, xb, top, bottom, strand), fill: track.color, stroke: theme.bg, 'stroke-width': outline }, parent)
       band.hits.push({ feature: f, rel0: seg.rel0, rel1: seg.rel1, inner: top, outer: bottom })
       const fontSize = Math.min(11, (bottom - top) * 0.8)
       if (fontSize >= 6.5 && f.name.length * fontSize * 0.58 + 6 <= xb - xa) {

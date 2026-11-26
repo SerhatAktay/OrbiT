@@ -68,16 +68,36 @@ function gtfRow(line) {
 
 const SKIP_TYPES = ['region', 'chromosome', 'source', 'supercontig']
 
+// Grows one feature per chromosome + gene_id in `merged` to span all of its rows.
+function mergeByGene(merged, id, row) {
+  const key = `${row.chrom}\t${id}`
+  const m = merged.get(key)
+  if (m) {
+    m.start = Math.min(m.start, row.start)
+    m.end = Math.max(m.end, row.end)
+  } else merged.set(key, { ...row, type: 'gene' })
+}
+
 // GTF and GFF3 (same 9 columns). Files repeat a gene as gene/transcript/exon/CDS;
-// when genes are present keep only those so each gene draws once.
+// when genes are present keep only those so each gene draws once. Without gene
+// rows, rows sharing a gene_id merge into one; rows without gene_id stay as they are.
 export function parseGtf(text) {
-  const rows = text
+  const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('#'))
-    .map(gtfRow)
-    .filter((f) => !SKIP_TYPES.includes(f.type))
-  return rows.some((f) => f.type === 'gene') ? rows.filter((f) => f.type === 'gene') : rows
+  const rows = lines.map(gtfRow)
+  const genes = rows.filter((f) => f.type === 'gene')
+  if (genes.length) return genes
+  const merged = new Map()
+  const loose = []
+  rows.forEach((row, i) => {
+    if (SKIP_TYPES.includes(row.type)) return
+    const id = attrValue(lines[i].split('\t')[8], 'gene_id')
+    if (id) mergeByGene(merged, id, row)
+    else loose.push(row)
+  })
+  return [...merged.values(), ...loose]
 }
 
 // Whole-genome GTF from an async iterable of lines (a 1.5M-line file never sits
@@ -95,12 +115,7 @@ export async function parseGtfLines(lines) {
       genes.push(row)
       continue
     }
-    const id = `${row.chrom}\t${attrValue(line.split('\t')[8], 'gene_id') ?? row.name}`
-    const m = merged.get(id)
-    if (m) {
-      m.start = Math.min(m.start, row.start)
-      m.end = Math.max(m.end, row.end)
-    } else merged.set(id, { ...row, type: 'gene' })
+    mergeByGene(merged, attrValue(line.split('\t')[8], 'gene_id') ?? row.name, row)
   }
   return genes.length ? genes : [...merged.values()]
 }
