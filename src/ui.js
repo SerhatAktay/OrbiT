@@ -100,6 +100,21 @@ export function renderTrackPanel(panelEl, trackList, cb) {
       group.value = mates.length ? String(mates[0].id) : ''
       group.addEventListener('change', () => cb.onOverlay(track.id, group.value ? Number(group.value) : null))
       card.append(h('div', { className: 'row small' }, group))
+      if (track.strand === 'paired') {
+        const swap = h('button', { textContent: 'Swap +/−', title: 'Exchange which file is the plus strand' })
+        swap.addEventListener('click', () => cb.onSwapStrands(track.id))
+        const split = h('button', { textContent: 'Split', title: 'Back to two separate tracks' })
+        split.addEventListener('click', () => cb.onSplitStrands(track.id))
+        card.append(h('div', { className: 'row small' }, swap, split))
+      } else {
+        const mates = sorted.filter((o) => o.type === 'signal' && o.strand === 'unstranded' && o.id !== track.id)
+        if (mates.length) {
+          const merge = h('select', { title: 'This track becomes the plus strand; the one you pick becomes the minus strand' }, h('option', { value: '', textContent: 'merge as + with…' }))
+          for (const o of mates) merge.append(h('option', { value: o.id, textContent: `− strand: ${o.name}` }))
+          merge.addEventListener('change', () => { if (merge.value) cb.onMergeStrands(track.id, Number(merge.value)) })
+          card.append(h('div', { className: 'row small' }, merge))
+        }
+      }
       adv.append(
         h('div', { className: 'row small' }, mode, min, max),
         h('div', { className: 'row small' }, 'bins', bins, '(0 = auto)'),

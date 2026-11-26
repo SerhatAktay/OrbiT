@@ -93,6 +93,47 @@ export function reorderTrack(trackList, id, newOrder) {
   return sorted.map((t, i) => ({ ...t, order: i }))
 }
 
+// ---- manual strand merge -----------------------------------------------------
+// A reader handle is { single } or { plus, minus }; each side keeps its own chromSizes,
+// so files that name the chromosome differently (chrM / MT) can still be merged.
+export const makeHandle = (parts) => ({ ...parts, chromSizes: (parts.single ?? parts.plus).chromSizes })
+export const mergeHandles = (plus, minus) => makeHandle({ plus: plus.single, minus: minus.single })
+export const swapHandle = (h) => makeHandle({ plus: h.minus, minus: h.plus })
+export const splitHandle = (h) => [makeHandle({ single: h.plus }), makeHandle({ single: h.minus })]
+
+// Join two unstranded signal tracks; the plus track keeps its id, name, place and settings.
+export function mergeStrands(trackList, plusId, minusId) {
+  const [plus, minus] = [plusId, minusId].map((id) => trackList.find((t) => t.id === id))
+  if (plusId === minusId || ![plus, minus].every((t) => t?.type === 'signal' && t.strand === 'unstranded')) return trackList
+  const merged = {
+    ...plus,
+    strand: 'paired',
+    files: { plus: plus.files.single, minus: minus.files.single },
+    colorMinus: minus.color,
+    weight: Math.max(plus.weight, 1.6),
+    genomeLength: plus.genomeLength ?? minus.genomeLength,
+  }
+  return removeTrack(trackList.map((t) => (t.id === plusId ? merged : t)), minusId)
+}
+
+// Exchange which file is plus. Colours stay with the strand, not the file.
+export function swapStrands(trackList, id) {
+  return trackList.map((t) => (t.id === id && t.strand === 'paired' ? { ...t, files: { plus: t.files.minus, minus: t.files.plus } } : t))
+}
+
+// Paired track back to two unstranded ones: plus keeps the id, minus goes right after it.
+export function splitStrands(trackList, id) {
+  const pair = trackList.find((t) => t.id === id)
+  if (pair?.strand !== 'paired') return { trackList, minusId: null }
+  const side = (file) => ({ name: file.replace(SIGNAL_EXT, ''), strand: 'unstranded', files: { single: file } })
+  const plus = { ...pair, ...side(pair.files.plus), weight: 1.2 }
+  const minus = { ...pair, ...side(pair.files.minus), id: nextId++, color: pair.colorMinus, weight: 1.2, group: null, order: pair.order + 0.5 }
+  const next = [...trackList.map((t) => (t.id === id ? plus : t)), minus]
+    .sort((a, b) => a.order - b.order)
+    .map((t, i) => ({ ...t, order: i }))
+  return { trackList: next, minusId: minus.id }
+}
+
 export function setColor(trackList, id, color) {
   return trackList.map((t) => (t.id === id ? { ...t, color } : t))
 }
@@ -141,15 +182,21 @@ export function checkGenomeLengthMismatch(track, genomeLength) {
 }
 
 export const SIGNAL_EXT = /\.(bw|bigwig|bedgraph|bdg|bg)(\.gz)?$/i
-const STRAND_TOKEN = /(^|[._-])(plus|minus|pos|neg|fwd|rev|forward|reverse|fw|rv)(?=[._-]|$)/i
-const PLUS_TOKENS = new Set(['plus', 'pos', 'fwd', 'forward', 'fw'])
+// Strand words must be delimited by . _ - or the name edges; "strand" may be attached (plusStrand).
+// Left out on purpose: p/m, for, min (as in "30_min"), sense/antisense (relative to a gene, not the genome).
+const PLUS_WORDS = ['plus', 'pls', 'pl', 'pos', 'positive', 'fwd', 'forward', 'forw', 'fw', 'watson']
+const MINUS_WORDS = ['minus', 'mns', 'mn', 'neg', 'negative', 'rev', 'reverse', 'rv', 'crick']
+const STRAND_TOKEN = new RegExp(`(^|[._-])(${[...PLUS_WORDS, ...MINUS_WORDS].join('|')})(?:strand)?(?=[._-]|$)`, 'gi')
+const PLUS_TOKENS = new Set(PLUS_WORDS)
 
 // { key, side } from a strand token in the filename, or null.
 export function strandInfo(file) {
   const name = file.name.replace(SIGNAL_EXT, '')
-  const m = name.match(STRAND_TOKEN)
+  // Last match wins: strand sits near the end, and short words like "pl" can be part of a sample name.
+  const m = [...name.matchAll(STRAND_TOKEN)].pop()
   if (!m) return null
-  return { key: name.replace(STRAND_TOKEN, '').replace(/[._-]+$/, ''), side: PLUS_TOKENS.has(m[2].toLowerCase()) ? 'plus' : 'minus' }
+  const key = (name.slice(0, m.index) + name.slice(m.index + m[0].length)).replace(/[._-]+$/, '')
+  return { key, side: PLUS_TOKENS.has(m[2].toLowerCase()) ? 'plus' : 'minus' }
 }
 
 // Group bigWig files into strand pairs by filename (sample.plus.bw + sample.minus.bw).

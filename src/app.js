@@ -21,6 +21,13 @@ import {
   strandInfo,
   SIGNAL_EXT,
   packLanes,
+  makeHandle,
+  mergeHandles,
+  swapHandle,
+  splitHandle,
+  mergeStrands,
+  swapStrands,
+  splitStrands,
 } from './tracks.js'
 import { openBigWig, openBedGraph, getBinnedValues } from './parse-bigwig.js'
 import { transformBins, gaussBins } from './signal.js'
@@ -58,7 +65,7 @@ const NT_MAX_SPAN = 4000 // area style: windows up to this many bp show every nu
 // gain = held pt-per-density (a = fit the current view, f = fixed read height); fit = refit on the next draw.
 const ySettings = { shared: false, factor: 1, locked: null, bars: true, readGain: false, unit: new Map(), gain: new Map(), fit: false }
 const loneStrand = new Map() // trackId -> { key, side, file } for unpaired strand files, so a later opposite file can join them
-const bigWigHandles = new Map() // trackId -> { chromSizes, single } | { chromSizes, plus, minus }
+const bigWigHandles = new Map() // trackId -> makeHandle(): { chromSizes, single } | { chromSizes, plus, minus }, each side an opened file
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -139,8 +146,8 @@ async function fetchSignal(track, handle, autoBins) {
   const start = nt ? Math.floor(viewStart) : viewStart
   const span = nt ? Math.ceil(viewStart + viewSpan) - start : viewSpan
   const n = nt ? span : Math.max(1, Math.min(track.binCount || autoBins, Math.ceil(span)))
-  const load = (reader) => {
-    const chrom = resolveChrom(handle.chromSizes, genome.name)
+  const load = ({ handle: reader, chromSizes }) => {
+    const chrom = resolveChrom(chromSizes, genome.name)
     if (!chrom) return Promise.resolve(Array.from({ length: n }, (_, i) => ({ start: start + (i * span) / n, end: start + ((i + 1) * span) / n, value: 0 })))
     return getBinnedValues(reader, chrom, start, start + span, n, genome.length, viewSpan <= 2e6)
   }
@@ -254,15 +261,51 @@ async function openEntry(entry) {
   if (checkGenomeLengthMismatch(track, genome.length)) {
     showError(`"${entry.name}" chromosome length (${length.toLocaleString('en-US')}) differs from the loaded genome (${genome.length.toLocaleString('en-US')}); the tail is clipped or empty.`)
   }
-  bigWigHandles.set(track.id, {
-    chromSizes: first.chromSizes,
-    ...(paired ? { plus: opened.plus.handle, minus: opened.minus.handle } : { single: opened.single.handle }),
-  })
-  const units = Object.values(opened).map((o) => o.unit).filter(Boolean)
-  if (units.length) ySettings.unit.set(track.id, Math.min(...units))
-  // PRO-seq default: first stranded pair turns on one shared Y range across samples (area style).
-  if (paired && !trackList.some((t) => t.strand === 'paired')) ySettings.shared = true
+  setHandle(track.id, makeHandle(opened))
+  if (paired) shareYForFirstPair()
   trackList = addTrack(trackList, track)
+}
+
+function setHandle(id, handle) {
+  bigWigHandles.set(id, handle)
+  const units = [handle.single, handle.plus, handle.minus].map((o) => o?.unit).filter(Boolean)
+  if (units.length) ySettings.unit.set(id, Math.min(...units))
+  else ySettings.unit.delete(id)
+}
+
+// PRO-seq default: first stranded pair turns on one shared Y range across samples (area style).
+function shareYForFirstPair() {
+  if (!trackList.some((t) => t.strand === 'paired')) ySettings.shared = true
+}
+
+// ---- manual strand merge ----
+
+function mergeAsStrands(plusId, minusId) {
+  const [plus, minus] = [plusId, minusId].map((id) => bigWigHandles.get(id))
+  const next = plus && minus ? mergeStrands(trackList, plusId, minusId) : trackList
+  if (next === trackList) return
+  shareYForFirstPair()
+  setHandle(plusId, mergeHandles(plus, minus))
+  bigWigHandles.delete(minusId)
+  loneStrand.delete(plusId) // a later opposite-strand file must not break up a manual merge
+  loneStrand.delete(minusId)
+  ySettings.gain.clear()
+  update(next, { rebuild: true })
+}
+
+function swapPair(id) {
+  setHandle(id, swapHandle(bigWigHandles.get(id)))
+  update(swapStrands(trackList, id), { rebuild: true })
+}
+
+function splitPair(id) {
+  const [plus, minus] = splitHandle(bigWigHandles.get(id))
+  const { trackList: next, minusId } = splitStrands(trackList, id)
+  if (minusId == null) return
+  setHandle(id, plus)
+  setHandle(minusId, minus)
+  ySettings.gain.clear()
+  update(next, { rebuild: true })
 }
 
 async function handleFiles(files) {
@@ -455,6 +498,9 @@ function rebuildPanel() {
     onColor: (id, c) => update(setColor(trackList, id, c)),
     onRename: (id, name) => update(setTrackProp(trackList, id, { name }), { rebuild: true }),
     onColorMinus: (id, c) => update(trackList.map((t) => (t.id === id ? { ...t, colorMinus: c } : t))),
+    onMergeStrands: mergeAsStrands,
+    onSwapStrands: swapPair,
+    onSplitStrands: splitPair,
     onReorder: (id, order) => update(reorderTrack(trackList, id, order), { rebuild: true }),
     onRemove: (id) => { bigWigHandles.delete(id); update(removeTrack(trackList, id), { rebuild: true }) },
     onWeight: (id, w) => update(setWeight(trackList, id, w)),
