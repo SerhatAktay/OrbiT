@@ -1,3 +1,5 @@
+import { visibleSegments } from './render.js'
+
 let nextId = 1
 
 export const PALETTE = ['#1f77b4', '#d62728', '#2ca02c', '#ff7f0e', '#9467bd', '#17becf', '#8c564b', '#e377c2']
@@ -51,6 +53,20 @@ export function packLanes(features) {
     lanes[i] = use
   }
   return { lanes, laneCount: Math.max(1, laneEnds.length) }
+}
+
+// Lanes for what is on screen. Only features at least `minPx` wide may open a new
+// lane: a cluster of slivers (hs1 chr5 protocadherins need 23 lanes) would
+// otherwise reserve height that looks empty. Narrower ones draw in the first lane.
+export function layoutAnnotation(track, viewStart, span, genomeLength, plotPx, minPx = 4) {
+  const wide = []
+  const narrow = []
+  for (const f of track.features) {
+    const bp = visibleSegments(f, genomeLength, viewStart, span).reduce((s, g) => s + g.rel1 - g.rel0, 0)
+    if (bp > 0) (bp * plotPx >= minPx * span ? wide : narrow).push(f)
+  }
+  const { lanes, laneCount } = packLanes(wide)
+  return { ...track, laneCount, features: [...narrow.map((f) => ({ ...f, lane: 0 })), ...wide.map((f, i) => ({ ...f, lane: lanes[i] }))] }
 }
 
 export function createAnnotationTrack({ name, features, color = '#888888' }) {
@@ -171,6 +187,17 @@ export function ringOwners(visible) {
 
 export function setWeight(trackList, id, weight) {
   return trackList.map((t) => (t.id === id ? { ...t, weight } : t))
+}
+
+// One plus and one minus colour for every signal track. Display only: each
+// track keeps its own colours. An unpaired minus-strand file takes the minus colour.
+export function applyUniformColors(trackList, { on, plus, minus }) {
+  if (!on) return trackList
+  return trackList.map((t) => {
+    if (t.type !== 'signal') return t
+    const isMinus = t.strand !== 'paired' && strandInfo({ name: t.files.single })?.side === 'minus'
+    return { ...t, color: isMinus ? minus : plus, colorMinus: minus }
+  })
 }
 
 export function visibleTracksInOrder(trackList) {

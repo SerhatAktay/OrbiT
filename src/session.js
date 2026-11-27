@@ -5,10 +5,11 @@ import { setView } from './genome.js'
 
 const KEYS = ['color', 'colorMinus', 'visible', 'weight', 'yScale', 'binCount', 'order', 'smooth', 'sharpen', 'group']
 
-export function captureSession(genome, trackList, mode) {
+export function captureSession(genome, trackList, mode, uniform) {
   return {
     version: 1,
     ...(mode ? { mode } : {}),
+    ...(uniform ? { uniform: { ...uniform } } : {}),
     genome: genome ? { name: genome.name, view: genome.view } : null,
     tracks: trackList.map((t) => ({
       name: t.name,

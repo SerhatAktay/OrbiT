@@ -20,7 +20,8 @@ import {
   pairBigWigFiles,
   strandInfo,
   SIGNAL_EXT,
-  packLanes,
+  layoutAnnotation,
+  applyUniformColors,
   makeHandle,
   mergeHandles,
   swapHandle,
@@ -42,6 +43,7 @@ import { captureSession, parseSession, applySessionTracks, applySessionView } fr
 
 const $ = (id) => document.getElementById(id)
 const canvasArea = $('canvas-area')
+const scroller = $('scroller')
 const svg = $('canvas')
 const viewport = $('viewport')
 const overlay = $('overlay')
@@ -59,6 +61,7 @@ let trackList = []
 let scene = null
 let lastAutoBins = 600
 let mode = 'linear' // or 'circular'
+const uniform = { on: false, plus: PALETTE[0], minus: PALETTE[1] } // same colours for all signal tracks
 const NT_MAX_SPAN = 4000 // area style: windows up to this many bp show every nucleotide by default
 // Global Y controls: shared symmetric max, zoom factor, locked autoscale. `bars` is the default
 // style (Gaussian bars); off = area outline. Bars, linear: unit = one read's score per track;
@@ -98,8 +101,7 @@ function annotationForChrom(track) {
   if (hit && hit.chrom === genome.name) return hit.track
   const mine = track.features.filter((f) => normChrom(f.chrom) === normChrom(genome.name))
   const features = mine.length || new Set(track.features.map((f) => f.chrom)).size > 1 ? mine : track.features
-  const { lanes, laneCount } = packLanes(features)
-  const out = { ...track, laneCount, features: features.map((f, i) => ({ ...f, lane: lanes[i] })) }
+  const out = { ...track, features }
   annotationCache.set(track, { chrom: genome.name, track: out })
   return out
 }
@@ -138,6 +140,11 @@ function requestRender() {
   requestAnimationFrame(() => { pending = false; render() })
 }
 
+// Length of the plot in pt: the linear width, or the outer ring.
+const plotLength = () => (mode === 'linear'
+  ? Math.max(50, svg.clientWidth - LEFT - 20) // 20 = RIGHT margin in draw-linear
+  : TAU * (Math.min(svg.clientWidth, scroller.clientHeight) / 2 - 48))
+
 async function fetchSignal(track, handle, autoBins) {
   const { start: viewStart, span: viewSpan } = genome.view
   // Short windows default to one bin per nucleotide on integer bp edges, so no bin
@@ -153,9 +160,7 @@ async function fetchSignal(track, handle, autoBins) {
   }
   const fx = { smoothBp: track.smooth || 0, sharpenUi: track.sharpen || 0, circular: viewSpan >= genome.length }
   // Bars: smoothing is a level (the slider value / 10) applied in screen pixels, not bp.
-  const plotLen = mode === 'linear'
-    ? Math.max(50, svg.clientWidth - LEFT - 20) // 20 = RIGHT margin in draw-linear
-    : TAU * (Math.min(svg.clientWidth, svg.clientHeight) / 2 - 48) // outer ring
+  const plotLen = plotLength()
   const tf = ySettings.bars
     ? (bins, abs) => gaussBins(bins, { level: Math.round((track.smooth || 0) / 10), ptPerBin: plotLen / bins.length, abs })
     : (bins, abs) => transformBins(bins, { ...fx, abs })
@@ -170,8 +175,10 @@ async function render() {
   if (!genome) return
   const gen = ++renderGeneration
   const width = svg.clientWidth
-  const height = svg.clientHeight
-  const visible = visibleTracksInOrder(trackList).map((t) => (t.type === 'annotation' ? annotationForChrom(t) : t))
+  const height = scroller.clientHeight // the window, not the svg: the svg grows when tracks don't fit
+  const { start, span } = genome.view
+  const visible = applyUniformColors(visibleTracksInOrder(trackList), uniform)
+    .map((t) => (t.type === 'annotation' ? layoutAnnotation(annotationForChrom(t), start, span, genome.length, plotLength()) : t))
   const autoBins = mode === 'linear'
     ? Math.max(180, Math.min(4000, Math.round((width - LEFT) / (ySettings.bars ? 1 : 2)))) // bars: one bin per pt, smoothed in pt
     : Math.max(180, Math.min(2000, Math.round((TAU * (Math.min(width, height) / 2 - 48)) / 2.5)))
@@ -193,6 +200,8 @@ async function render() {
   if (gen !== renderGeneration) return
 
   scene = (mode === 'linear' ? drawLinear : drawScene)(viewport, { width, height, genome, tracks: visible, data, theme: theme(), ySettings })
+  svg.style.height = scene.height > height ? `${scene.height}px` : ''
+  stickHeader()
   overlay.replaceChildren()
   $('empty').style.display = trackList.length ? 'none' : 'flex'
   const flags = [!ySettings.bars && ySettings.shared && 'shared Y', (ySettings.locked || ySettings.gain.size) && 'Y held', ySettings.readGain && 'fixed read height', ySettings.factor !== 1 && `Y ×${ySettings.factor.toFixed(2)}`].filter(Boolean)
@@ -217,7 +226,16 @@ function syncGlobals() {
   $('g-sharpen-v').textContent = sig[0].sharpen ? `${sig[0].sharpen}%` : 'off'
   $('g-shared').checked = ySettings.shared
   $('g-lock').checked = !!ySettings.locked || ySettings.gain.size > 0
+  $('g-uniform').checked = uniform.on
+  $('g-plus').value = uniform.plus
+  $('g-minus').value = uniform.minus
 }
+
+// The linear ruler stays at the top of the window while the tracks scroll under it.
+function stickHeader() {
+  viewport.querySelector('[data-sticky]')?.setAttribute('transform', `translate(0,${scroller.scrollTop})`)
+}
+scroller.addEventListener('scroll', () => { stickHeader(); overlay.replaceChildren(); tooltip.style.display = 'none' })
 
 // ---- file loading ----------------------------------------------------------
 
@@ -461,6 +479,7 @@ let pendingSession = null
 function applyPendingSession() {
   if (!pendingSession) return
   if (pendingSession.mode) { const m = pendingSession.mode; delete pendingSession.mode; setMode(m) } // once
+  if (pendingSession.uniform) { Object.assign(uniform, pendingSession.uniform); delete pendingSession.uniform } // once
   trackList = applySessionTracks(pendingSession, trackList)
   genome = applySessionView(pendingSession, genome)
 }
@@ -478,7 +497,7 @@ async function loadSessionFile(file) {
 }
 
 function saveSession() {
-  const blob = new Blob([JSON.stringify(captureSession(genome, trackList, mode), null, 2)], { type: 'application/json' })
+  const blob = new Blob([JSON.stringify(captureSession(genome, trackList, mode, uniform), null, 2)], { type: 'application/json' })
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${genome?.name ?? 'orbit'}_session.json` })
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
@@ -509,6 +528,7 @@ function rebuildPanel() {
     onSmooth: (id, bp) => update(setTrackProp(trackList, id, { smooth: bp })),
     onSharpen: (id, v) => update(setTrackProp(trackList, id, { sharpen: v })),
     smoothLabel,
+    uniformColors: () => uniform.on,
     bars: () => ySettings.bars,
     onOverlay: (id, otherId) => {
       const other = trackList.find((t) => t.id === otherId)
@@ -529,7 +549,7 @@ function locate(event) {
     const x = event.clientX - rect.left
     const y = event.clientY - rect.top
     const { x0, w, top, bottom } = scene.plot
-    const inPlot = x >= x0 && x <= x0 + w && y >= top && y <= bottom
+    const inPlot = x >= x0 && x <= x0 + w && y >= top + scroller.scrollTop && y <= bottom
     const rel = clamp((x - x0) / w, 0, 1) * genome.view.span
     const band = inPlot ? scene.bands.find((b) => y >= b.top && y <= b.bottom) : undefined
     return { r: y, x, rel, bp: bpAtRel(genome, rel), band, inPlot }
@@ -594,7 +614,7 @@ svg.addEventListener('pointermove', (event) => {
     const a = (loc.rel / genome.view.span) * TAU - Math.PI / 2
     const line = overlay.firstChild || overlay.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'line'))
     const [x1, y1, x2, y2] = mode === 'linear'
-      ? [loc.x, scene.plot.top, loc.x, scene.plot.bottom]
+      ? [loc.x, scene.plot.top + scroller.scrollTop, loc.x, scene.plot.bottom]
       : [scene.cx + scene.minRadius * Math.cos(a), scene.cy + scene.minRadius * Math.sin(a), scene.cx + scene.rulerR * Math.cos(a), scene.cy + scene.rulerR * Math.sin(a)]
     line.setAttribute('x1', x1)
     line.setAttribute('y1', y1)
@@ -616,7 +636,7 @@ function onSvgClick(event) {
     // Click on the minimap strip: centre the window on that bp.
     const rect = svg.getBoundingClientRect()
     const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
+    const y = event.clientY - rect.top - scroller.scrollTop // the minimap is in the stuck header
     if (x >= m.x && x <= m.x + m.w && y >= m.y - 4 && y <= m.y + m.h + 4) {
       genome = setView(genome, ((x - m.x) / m.w) * genome.length - genome.view.span / 2, genome.view.span)
       return requestRender()
@@ -780,11 +800,21 @@ for (const [id, key] of [['g-smooth', 'smooth'], ['g-sharpen', 'sharpen']]) {
   $(id).addEventListener('input', (e) => setAllSignals({ [key]: Number(e.target.value) }, false))
   $(id).addEventListener('change', rebuildPanel)
 }
+$('g-uniform').addEventListener('change', (e) => { uniform.on = e.target.checked; rebuildPanel(); requestRender() })
+for (const side of ['plus', 'minus']) {
+  $(`g-${side}`).addEventListener('input', (e) => {
+    const wasOn = uniform.on
+    Object.assign(uniform, { [side]: e.target.value, on: true }) // picking a colour turns it on
+    if (!wasOn) rebuildPanel()
+    requestRender()
+  })
+}
 $('g-shared').addEventListener('change', (e) => { ySettings.shared = e.target.checked; requestRender() })
 $('g-bars').addEventListener('change', toggleStyle)
 $('g-lock').addEventListener('change', (e) => (e.target.checked ? KEYS.y() : KEYS.Y()))
 $('g-ydown').addEventListener('click', KEYS['['])
 $('g-yup').addEventListener('click', KEYS[']'])
+$('feature-btn').addEventListener('click', () => $('feature-dialog').showModal())
 $('help-btn').addEventListener('click', () => { helpEl.hidden = !helpEl.hidden })
 $('help-close').addEventListener('click', () => { helpEl.hidden = true })
 new ResizeObserver(requestRender).observe(canvasArea)

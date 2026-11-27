@@ -59,7 +59,7 @@ Small test files (`chrM.plus.bw`, `chrM.minus.bw`, `sample.bed`) are in [`test/f
 
 | Action | Effect |
 | --- | --- |
-| Scroll | zoom at cursor |
+| Scroll | zoom at cursor. If the tracks don't all fit, scroll over the track names (or use the scrollbar) to see the rest |
 | Drag | rotate (circular) or pan (linear) |
 | Double-click (Shift) | zoom in (out) |
 | Click a feature | zoom to it |
@@ -85,6 +85,8 @@ The bar at the top of the side panel applies to all signal tracks:
 | bins | `b` / `B` | fewer / more bins. Default is automatic: one bin per screen point in linear bars, otherwise about one per 2 screen pixels (area style: one per nucleotide at 4 kb or less). |
 
 Signal is drawn as one flat bar per bin, with no interpolation between bins. Strand pairs use a symmetric Y range by default.
+
+**Same colours** (side panel) gives every signal track one plus and one minus colour; untick it to get each track's own colours back.
 
 Each track card has visibility, colour, order (drag the `⠿` handle or use ↑/↓) and ring thickness. Per-track Y min/max, bin count and smoothing are under **Advanced**.
 
@@ -117,5 +119,7 @@ GitHub's "Cite this repository" button uses `CITATION.cff`.
 [MIT](LICENSE).
 
 ## Feedback
+
+To request a feature, use the **Request a feature** header button or email <orbitgenomeviewer@gmail.com>.
 
 When something looks wrong, a screenshot plus the file type and approximate window (for example `chrM 7,900–8,100`) helps most.

@@ -1,6 +1,7 @@
 // src/export.js — save the current scene as SVG or PNG.
 function serialize(svgEl) {
   const clone = svgEl.cloneNode(true)
+  clone.querySelector('[data-sticky]')?.removeAttribute('transform') // exports are unscrolled
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
   clone.setAttribute('width', svgEl.clientWidth)
   clone.setAttribute('height', svgEl.clientHeight)

@@ -26,36 +26,40 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   const full = span >= length
   const x0 = LEFT
   const w = Math.max(50, width - LEFT - RIGHT)
-  const scene = { mode: 'linear', plot: { x0, w, top: TOP, bottom: height - BOTTOM }, bands: [] }
+  const scene = { mode: 'linear', plot: { x0, w, top: TOP, bottom: height - BOTTOM }, bands: [], height }
 
-  el('rect', { x: 0, y: 0, width, height, fill: theme.bg }, root)
+  const background = el('rect', { x: 0, y: 0, width, height, fill: theme.bg }, root)
   const g = el('g', {}, root)
   if (height < TOP + BOTTOM + 60 || width < LEFT + 120) return scene
 
+  // Header: kept in its own group, added last, so it can stay on top while the tracks scroll.
+  const head = el('g', { 'data-sticky': '' })
+  el('rect', { x: 0, y: 0, width, height: TOP - 2, fill: theme.bg }, head)
+
   // Gutter header: the chromosome (the window ends are printed on the ruler, in full).
-  text(g, genome.name, 12, 22, { 'font-size': 15, 'font-weight': 600, fill: theme.fg })
-  text(g, full ? `${length.toLocaleString('en-US')} bp` : `${Math.round(span).toLocaleString('en-US')} bp window`, 12, 40, { 'font-size': 11, fill: theme.muted })
+  text(head, genome.name, 12, 22, { 'font-size': 15, 'font-weight': 600, fill: theme.fg })
+  text(head, full ? `${length.toLocaleString('en-US')} bp` : `${Math.round(span).toLocaleString('en-US')} bp window`, 12, 40, { 'font-size': 11, fill: theme.muted })
 
   // Minimap strip: whole genome with the window as a box (zoomed only).
   if (!full) {
     const my = 10
     const mh = 8
     scene.minimap = { x: x0, y: my, w, h: mh }
-    el('rect', { x: x0, y: my, width: w, height: mh, fill: theme.bg, stroke: theme.muted, 'stroke-width': 1 }, g)
+    el('rect', { x: x0, y: my, width: w, height: mh, fill: theme.bg, stroke: theme.muted, 'stroke-width': 1 }, head)
     const a = (vs / length) * w
     const b = ((vs + span) / length) * w
-    const box = (from, to) => el('rect', { x: x0 + from, y: my, width: Math.max(2, to - from), height: mh, fill: theme.accent, 'fill-opacity': 0.6 }, g)
+    const box = (from, to) => el('rect', { x: x0 + from, y: my, width: Math.max(2, to - from), height: mh, fill: theme.accent, 'fill-opacity': 0.6 }, head)
     if (vs + span <= length) box(a, b)
     else { box(a, w); box(0, ((vs + span - length) / length) * w) }
   }
 
   // Ruler.
-  el('line', { x1: x0, y1: RULER_Y, x2: x0 + w, y2: RULER_Y, stroke: theme.fg, 'stroke-width': 1 }, g)
+  el('line', { x1: x0, y1: RULER_Y, x2: x0 + w, y2: RULER_Y, stroke: theme.fg, 'stroke-width': 1 }, head)
   const step = niceStep(span)
   const num = (n) => Math.round(n).toLocaleString('en-US')
   // Window ends in full, so the coordinates are always exact, however far you zoom.
-  text(g, num(vs + 1), x0, RULER_Y - 14, { 'font-size': 10, 'font-weight': 600, fill: theme.fg, 'text-anchor': 'start' })
-  text(g, num(((vs + span - 1) % length) + 1), x0 + w, RULER_Y - 14, { 'font-size': 10, 'font-weight': 600, fill: theme.fg, 'text-anchor': 'end' })
+  text(head, num(vs + 1), x0, RULER_Y - 14, { 'font-size': 10, 'font-weight': 600, fill: theme.fg, 'text-anchor': 'start' })
+  text(head, num(((vs + span - 1) % length) + 1), x0 + w, RULER_Y - 14, { 'font-size': 10, 'font-weight': 600, fill: theme.fg, 'text-anchor': 'end' })
   // Label every `stride`-th major tick, so labels never touch and keep an even rhythm.
   const labelPx = num(Math.min(length, vs + span)).length * 6 + 14
   const stride = Math.max(1, Math.ceil(labelPx / ((step / span) * w)))
@@ -63,23 +67,29 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   for (const t of rulerTicks(length, vs, span)) {
     const x = xOf(t.rel, span, x0, w)
     if (x < x0 - 0.5 || x > x0 + w + 0.5) continue
-    el('line', { x1: x, y1: RULER_Y, x2: x, y2: RULER_Y - (t.major ? 8 : 4), stroke: theme.fg, 'stroke-width': t.major ? 1 : 0.6 }, g)
+    el('line', { x1: x, y1: RULER_Y, x2: x, y2: RULER_Y - (t.major ? 8 : 4), stroke: theme.fg, 'stroke-width': t.major ? 1 : 0.6 }, head)
     if (!t.major) continue
     majors.push(x)
     if (Math.round((vs + t.rel) / step) % stride !== 0 || x < x0 + END_LABEL_PAD || x > x0 + w - END_LABEL_PAD) continue
-    text(g, num(t.bp), x, RULER_Y - 14, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'middle' })
+    text(head, num(t.bp), x, RULER_Y - 14, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'middle' })
   }
   // Distance between two neighbouring (major) grid lines, so the grid has a scale.
   if (majors.length >= 2) {
     const [xa, xb] = majors
     const y = RULER_Y + 6
-    el('path', { d: `M${xa},${y - 3}V${y + 3}M${xa},${y}H${xb}M${xb},${y - 3}V${y + 3}`, fill: 'none', stroke: theme.muted, 'stroke-width': 1 }, g)
-    text(g, formatDist(step), (xa + xb) / 2, y + 12, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'middle' })
+    el('path', { d: `M${xa},${y - 3}V${y + 3}M${xa},${y}H${xb}M${xb},${y - 3}V${y + 3}`, fill: 'none', stroke: theme.muted, 'stroke-width': 1 }, head)
+    text(head, formatDist(step), (xa + xb) / 2, y + 12, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'middle' })
   }
 
   // Bands.
   const owners = ringOwners(tracks)
   scene.bands = computeLinearBands(owners, { top: TOP, bottom: height - BOTTOM })
+  // Bands share the window until they reach their minimum height; past that the
+  // scene grows taller than the window and the view scrolls.
+  const fullHeight = Math.max(height, Math.ceil((scene.bands.at(-1)?.bottom ?? 0) + BOTTOM))
+  scene.height = fullHeight
+  scene.plot.bottom = fullHeight - BOTTOM
+  background.setAttribute('height', fullHeight)
   const { bandMax, sharedMax } = prepareSignalBands(scene.bands, tracks, data)
   scene.bandMax = bandMax
   const bars = !!ySettings?.bars
@@ -150,9 +160,12 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
   const originRel = (length - vs) % length
   if (originRel < span) {
     const x = xOf(originRel, span, x0, w)
-    el('line', { x1: x, y1: RULER_Y - 20, x2: x, y2: height - BOTTOM, stroke: theme.accent, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }, g)
-    text(g, 'origin', x + 4, RULER_Y - 24, { 'font-size': 10, 'font-weight': 600, fill: theme.accent })
+    const line = (y1, y2, parent) => el('line', { x1: x, y1, x2: x, y2, stroke: theme.accent, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }, parent)
+    line(TOP - 2, fullHeight - BOTTOM, g)
+    line(RULER_Y - 20, TOP - 2, head)
+    text(head, 'origin', x + 4, RULER_Y - 24, { 'font-size': 10, 'font-weight': 600, fill: theme.accent })
   }
+  g.appendChild(head)
   return scene
 }
 

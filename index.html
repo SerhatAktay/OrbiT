@@ -32,6 +32,7 @@
     #canvas-area { flex: 1; position: relative; min-width: 0; }
     #canvas-area.dragover { outline: 3px dashed var(--accent); outline-offset: -3px; }
     #canvas-area { user-select: none; -webkit-user-select: none; }
+    #scroller { position: absolute; inset: 0; overflow: hidden auto; }
     svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
     svg:active { cursor: grabbing; }
     #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); pointer-events: none; line-height: 1.6; }
@@ -62,6 +63,8 @@
     #help { position: absolute; inset: 0; margin: auto; width: 400px; max-width: 90%; height: fit-content; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; z-index: 6; line-height: 1.9; }
     #help[hidden] { display: none; }
     #help h2 { margin: 0 0 6px; font-size: 14px; }
+    #feature-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; max-width: 90%; line-height: 1.8; }
+    #feature-dialog a { color: var(--accent); }
     #pick-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; max-width: 90%; }
     #pick-dialog[open] { display: flex; flex-direction: column; gap: 6px; }
     #pick-dialog button { text-align: left; }
@@ -94,18 +97,19 @@
       </div>
     </div>
     <button id="theme-btn" title="Switch between light and dark mode (exports use the current one)"></button>
+    <button id="feature-btn" title="Send us an idea by email">Request a feature</button>
     <button id="help-btn" title="Shortcuts and about (?)">Help</button>
   </header>
   <main>
     <div id="canvas-area">
       <div id="error-banner"></div>
-      <svg id="canvas"><g id="viewport"></g><g id="overlay" pointer-events="none"></g></svg>
+      <div id="scroller"><svg id="canvas"><g id="viewport"></g><g id="overlay" pointer-events="none"></g></svg></div>
       <div id="empty">Drop bigWig (.bw) and annotation (.bed / .gtf / .gff) files here<br />Plus/minus strand pairs (<code>x.plus.bw</code> + <code>x.minus.bw</code>) merge automatically</div>
       <div id="tooltip"></div>
       <div id="help" hidden>
         <h2>Help &amp; about <button id="help-close" style="float:right">×</button></h2>
         <b>Mouse</b><br />
-        scroll: zoom at cursor · drag: pan (rotate in circular view)<br />
+        scroll: zoom at cursor (over the track names: scroll the tracks, when they don't all fit) · drag: pan (rotate in circular view)<br />
         double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it<br />
         <b>Keyboard</b><br />
         <kbd>/</kbd> search · <kbd>R</kbd> reset view · <kbd>V</kbd> circular / linear · <kbd>?</kbd> this panel · <kbd>Esc</kbd> close<br />
@@ -123,6 +127,7 @@
           Interactive viewer for small circular genomes (mitochondria first) with strand-specific PRO-seq style signal, in a circular and a linear view. Everything runs locally in your browser: your files are never uploaded.<br />
           <b>Citing:</b> a paper is in preparation. Until it is out, please cite the GitHub page:<br />
           Aktay, S. OrbiT. <a href="https://github.com/SerhatAktay/OrbiT" target="_blank" rel="noopener">github.com/SerhatAktay/OrbiT</a><br />
+          Feature requests: <a href="mailto:orbitgenomeviewer@gmail.com">orbitgenomeviewer@gmail.com</a><br />
           Version 1.0.0 · bugs and ideas: <a href="https://github.com/SerhatAktay/OrbiT/issues" target="_blank" rel="noopener">GitHub issues</a>
         </div>
       </div>
@@ -133,6 +138,12 @@
       <div id="globals" class="track-card" hidden>
         <div class="row small">smooth <input id="g-smooth" type="range" min="0" max="2000" step="10" title="All signal tracks (s / S)" /><span id="g-smooth-v"></span></div>
         <div class="row small">sharpen <input id="g-sharpen" type="range" min="0" max="100" step="5" title="All signal tracks (k / K)" /><span id="g-sharpen-v"></span></div>
+        <div class="row small">
+          <label title="One plus and one minus colour for all signal tracks"><input id="g-uniform" type="checkbox" /> same colours</label>
+          <span class="spacer"></span>
+          + <input id="g-plus" type="color" title="Plus-strand colour, all tracks" />
+          − <input id="g-minus" type="color" title="Minus-strand colour, all tracks" />
+        </div>
         <div class="row small">
           <label title="One Y range for all samples (p)"><input id="g-shared" type="checkbox" /> shared Y</label>
           <label title="Bars (Gaussian, default) or area outline (t)"><input id="g-bars" type="checkbox" /> bars</label>
@@ -147,5 +158,11 @@
   </main>
   <script type="module" src="src/app.js"></script>
   <dialog id="pick-dialog"></dialog>
+  <dialog id="feature-dialog">
+    Email your feature request to <b style="user-select: all">orbitgenomeviewer@gmail.com</b><br />
+    Tell us what you would like OrbiT to do and what you would use it for.<br />
+    <a href="mailto:orbitgenomeviewer@gmail.com?subject=OrbiT%20feature%20request&amp;body=What%20would%20you%20like%20OrbiT%20to%20do%3F%0D%0A%0D%0A%0D%0AWhat%20would%20you%20use%20it%20for%3F%0D%0A">Open in your mail app</a>
+    <form method="dialog" style="text-align: right"><button>Close</button></form>
+  </dialog>
 </body>
 </html>

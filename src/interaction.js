@@ -35,6 +35,9 @@ export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick
   svgEl.addEventListener('wheel', (event) => {
     const genome = getGenome()
     if (!genome || !getPlot()) return
+    // When tracks overflow, the wheel over the track names scrolls the list; over the plot it zooms.
+    const box = svgEl.parentElement
+    if (xIn(event) < getPlot().x0 && box.scrollHeight > box.clientHeight) return
     event.preventDefault()
     if (discrete()) {
       // One wheel flick = one 25% step (x0.8 in, x1.25 out) at the cursor; trackpad
@@ -84,9 +87,9 @@ export function attachZoomPan(svgEl, getGenome, onChange, onClick) {
   let moved = 0
 
   svgEl.addEventListener('wheel', (event) => {
-    event.preventDefault()
     const genome = getGenome()
-    if (!genome) return
+    if (!genome) return // inactive: leave the wheel to the linear view (or the scrollbar)
+    event.preventDefault()
     const factor = Math.exp(event.deltaY * 0.0015) // smooth for trackpads and wheels
     onChange(zoomAt(genome, factor, fracOf(svgEl, event)))
   }, { passive: false })
