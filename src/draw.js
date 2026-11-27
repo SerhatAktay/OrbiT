@@ -95,7 +95,7 @@ export function drawScene(root, { width, height, genome, tracks, data, theme, yS
     el('line', { x1, y1, x2, y2, stroke: theme.accent, 'stroke-width': 1, 'stroke-dasharray': '3 3' }, g)
   }
 
-  // Origin (bp 1) marker whenever the window covers it, so rotation never hides where the genome starts.
+  // bp 1 marker whenever the window covers it, so rotation never hides where the genome starts.
   const originRel = (length - vs) % length
   if (originRel < span) {
     const a = relAngle(originRel, span)
@@ -103,7 +103,7 @@ export function drawScene(root, { width, height, genome, tracks, data, theme, yS
     const [x2, y2] = polar(rulerR + 12, a)
     el('line', { x1, y1, x2, y2, stroke: theme.accent, 'stroke-width': 2.5 }, g)
     const [lx, ly] = polar(rulerR + 32, a)
-    text(g, 'origin', lx, ly, { 'font-size': 10, 'font-weight': 600, fill: theme.accent, 'text-anchor': 'middle', 'dominant-baseline': 'central', transform: `rotate(${uprightRotation(a)} ${lx} ${ly})` })
+    text(g, 'bp 1', lx, ly, { 'font-size': 10, 'font-weight': 600, fill: theme.accent, 'text-anchor': 'middle', 'dominant-baseline': 'central', transform: `rotate(${uprightRotation(a)} ${lx} ${ly})` })
   }
 
   // Minimap: whole genome with the current window as an arc. Only when zoomed and clear of the main ring.

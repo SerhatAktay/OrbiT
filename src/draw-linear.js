@@ -156,14 +156,14 @@ export function drawLinear(root, { width, height, genome, tracks, data, theme, y
     if (rangeLine) text(g, rangeLine, x0 - 8, top + 12 + names.length * 13, { 'font-size': 10, fill: theme.muted, 'text-anchor': 'end' })
   }
 
-  // Origin (bp 1) line across everything, drawn last so it stays visible.
+  // bp 1 line across everything, drawn last so it stays visible.
   const originRel = (length - vs) % length
   if (originRel < span) {
     const x = xOf(originRel, span, x0, w)
     const line = (y1, y2, parent) => el('line', { x1: x, y1, x2: x, y2, stroke: theme.accent, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' }, parent)
     line(TOP - 2, fullHeight - BOTTOM, g)
     line(RULER_Y - 20, TOP - 2, head)
-    text(head, 'origin', x + 4, RULER_Y - 24, { 'font-size': 10, 'font-weight': 600, fill: theme.accent })
+    text(head, 'bp 1', x + 4, RULER_Y - 24, { 'font-size': 10, 'font-weight': 600, fill: theme.accent })
   }
   g.appendChild(head)
   return scene

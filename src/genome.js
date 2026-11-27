@@ -18,9 +18,13 @@ export function isFullView(genome) {
   return genome.view.span >= genome.length
 }
 
+// Circular view wraps; linear view stops at both ends.
+let wrap = true
+export const setWrap = (on) => { wrap = on }
+
 export function setView(genome, start, span) {
   const clampedSpan = Math.min(genome.length, Math.max(Math.min(MIN_SPAN, genome.length), span))
-  return { ...genome, view: { start: mod(start, genome.length), span: clampedSpan } }
+  return { ...genome, view: { start: wrap ? mod(start, genome.length) : Math.min(genome.length - clampedSpan, Math.max(0, start)), span: clampedSpan } }
 }
 
 export function resetView(genome) {

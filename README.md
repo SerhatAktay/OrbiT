@@ -54,8 +54,8 @@ Small test files (`chrM.plus.bw`, `chrM.minus.bw`, `sample.bed`) are in [`test/f
 
 ## Find your way around
 
-- **Circular view** (default). The origin (bp 1) is marked at 12 o'clock and bp increases clockwise (hint in the centre). A live readout shows the position under the cursor, with the gene name when over one. When zoomed, a minimap at top left shows the current window as a highlighted arc; click it to jump.
-- **Linear view**. Press `v` or use the header toggle. Ruler on top, tracks stacked below, strand pairs mirrored about a centre line. Position is kept when you switch views.
+- **Circular view** (default). bp 1 is marked, at 12 o'clock in the full view, and bp increases clockwise (hint in the centre). A live readout shows the position under the cursor, with the gene name when over one. When zoomed, a minimap at top left shows the current window as a highlighted arc; click it to jump.
+- **Linear view**. Press `v` or use the header toggle. Ruler on top, tracks stacked below, strand pairs mirrored about a centre line. Panning and zooming stop at both sequence ends; to look across the join of a circular genome, use the circular view. Position is kept when you switch views (a window that crosses the join moves to fit inside the ends).
 
 | Action | Effect |
 | --- | --- |

@@ -1,6 +1,6 @@
 // src/app.js — state, file loading, render loop, hover/click.
 import { BlobFile } from '../vendor/bbi.bundle.js'
-import { createGenome, resetView, setView, zoomToRange, bpAtRel, isFullView, zoomAt, panBy } from './genome.js'
+import { createGenome, resetView, setView, zoomToRange, bpAtRel, isFullView, zoomAt, panBy, setWrap } from './genome.js'
 import {
   PALETTE,
   createSignalTrack,
@@ -62,6 +62,7 @@ let trackList = []
 let scene = null
 let lastAutoBins = 600
 let mode = 'linear' // or 'circular'
+setWrap(false)
 const uniform = { on: false, plus: PALETTE[0], minus: PALETTE[1] } // same colours for all signal tracks
 const NT_MAX_SPAN = 4000 // area style: windows up to this many bp show every nucleotide by default
 // Global Y controls: shared symmetric max, zoom factor, locked autoscale. `bars` is the default
@@ -745,7 +746,8 @@ const helpEl = $('help')
 function setMode(next) {
   mode = next
   scene = null
-  if (mode === 'linear' && genome && isFullView(genome)) genome = resetView(genome)
+  setWrap(mode === 'circular')
+  if (genome) genome = setView(genome, genome.view.start, genome.view.span)
   $('mode-btn').textContent = mode === 'linear' ? 'Circular view' : 'Linear view'
   overlay.replaceChildren()
   $('pos').textContent = ''
@@ -841,7 +843,7 @@ showTheme(document.documentElement.dataset.theme)
 // getGenome is a getter: handlers are attached once, before any file loads.
 // Each attach is active only in its own mode (getGenome returns null otherwise).
 // The full linear view has no rotation, so it always starts at bp 1.
-const setGenome = (next) => { genome = mode === 'linear' && isFullView(next) ? resetView(next) : next; requestRender() }
+const setGenome = (next) => { genome = next; requestRender() }
 attachZoomPan(svg, () => (mode === 'circular' ? genome : null), setGenome, onSvgClick, $('selection'), () => scene && { inner: scene.minRadius, outer: scene.rulerR })
 attachLinearZoomPan(svg, () => (mode === 'linear' ? genome : null), () => scene?.plot, setGenome, onSvgClick, () => ySettings.bars, $('selection'))
 rebuildPanel()
