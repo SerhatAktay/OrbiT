@@ -1,6 +1,6 @@
 // src/interaction.js
-import { zoomAt, panBy } from './genome.js'
-import { TAU } from './render.js'
+import { zoomAt, panBy, zoomToRange } from './genome.js'
+import { TAU, arcPath } from './render.js'
 
 const angleOf = (svgEl, event) => {
   const r = svgEl.getBoundingClientRect()
@@ -15,14 +15,34 @@ export function radiusOf(svgEl, event) {
   return Math.hypot(event.clientX - r.left - r.width / 2, event.clientY - r.top - r.height / 2)
 }
 
+const SELECT_TOP = 40 // linear selection starts here, so it covers the ruler as well as the tracks
+
+// The highlight shown while Shift+dragging, drawn in its own SVG layer. Esc cancels.
+function selection(layer, onCancel) {
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { layer.replaceChildren(); onCancel() } })
+  return {
+    show(tag, attrs) {
+      const node = layer.firstChild ?? layer.appendChild(document.createElementNS('http://www.w3.org/2000/svg', tag))
+      const style = { fill: 'var(--accent)', 'fill-opacity': 0.2, stroke: 'var(--accent)', 'stroke-width': 1 }
+      for (const [k, v] of Object.entries({ ...style, ...attrs })) node.setAttribute(k, v)
+    },
+    clear: () => layer.replaceChildren(),
+  }
+}
+
+// Zoom to the part of the view between two fractions of it.
+const zoomToFracs = (genome, a, b) => zoomToRange(genome, genome.view.start + Math.min(a, b) * genome.view.span, genome.view.start + Math.max(a, b) * genome.view.span, 0)
+
 // `getGenome` returns the *current* genome: this is wired once before any file
 // loads, so handlers must read live state instead of closing over a stale value.
 // onClick fires for a press-release without drag.
 // Linear counterpart: wheel zooms at the cursor, drag pans horizontally.
 // `getPlot` returns { x0, w } of the current scene. As above, getGenome returns
 // null while this mode is inactive.
-export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick, discrete = () => false) {
+export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick, discrete = () => false, layer = null) {
   let lastX = null
+  let anchor = null // { frac, x } while Shift+dragging a region
+  const highlight = layer && selection(layer, () => { if (anchor) { anchor = null; lastX = null } })
   let acc = 0
   let lastStep = 0
   let moved = 0
@@ -56,6 +76,7 @@ export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick
   svgEl.addEventListener('pointerdown', (event) => {
     if (!getGenome() || !getPlot()) return
     lastX = xIn(event)
+    anchor = highlight && event.shiftKey && lastX >= getPlot().x0 ? { frac: fracAt(event), x: lastX } : null
     moved = 0
     svgEl.setPointerCapture(event.pointerId)
   })
@@ -68,13 +89,25 @@ export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick
     const dx = x - lastX
     lastX = x
     moved += Math.abs(dx)
+    if (anchor) {
+      const { x0, w, bottom } = getPlot()
+      const [a, b] = [anchor.frac, fracAt(event)].sort((p, q) => p - q)
+      const y = svgEl.parentElement.scrollTop + SELECT_TOP
+      highlight.show('rect', { x: x0 + a * w, y, width: (b - a) * w, height: Math.max(0, bottom - y) })
+      return
+    }
     if (moved > 4) onChange(panBy(genome, -(dx / getPlot().w) * genome.view.span))
   })
 
   svgEl.addEventListener('pointerup', (event) => {
     if (lastX !== null && moved <= 4 && onClick) onClick(event)
+    else if (anchor && getGenome() && Math.abs(xIn(event) - anchor.x) > 4) onChange(zoomToFracs(getGenome(), anchor.frac, fracAt(event)))
+    if (anchor) highlight.clear()
+    anchor = null
     lastX = null
   })
+
+  svgEl.addEventListener('pointercancel', () => { highlight?.clear(); anchor = null; lastX = null })
 
   svgEl.addEventListener('dblclick', (event) => {
     const genome = getGenome()
@@ -82,8 +115,10 @@ export function attachLinearZoomPan(svgEl, getGenome, getPlot, onChange, onClick
   })
 }
 
-export function attachZoomPan(svgEl, getGenome, onChange, onClick) {
+export function attachZoomPan(svgEl, getGenome, onChange, onClick, layer = null, getRadii = () => null) {
   let last = null // last pointer angle while dragging
+  let sweep = null // { from, turned } (fraction, radians) while Shift+dragging an arc
+  const highlight = layer && selection(layer, () => { if (sweep) { sweep = null; last = null } })
   let moved = 0
 
   svgEl.addEventListener('wheel', (event) => {
@@ -97,6 +132,7 @@ export function attachZoomPan(svgEl, getGenome, onChange, onClick) {
   svgEl.addEventListener('pointerdown', (event) => {
     if (!getGenome()) return
     last = angleOf(svgEl, event)
+    sweep = highlight && event.shiftKey && getRadii() ? { from: fracOf(svgEl, event), turned: 0 } : null
     moved = 0
     svgEl.setPointerCapture(event.pointerId)
   })
@@ -111,13 +147,30 @@ export function attachZoomPan(svgEl, getGenome, onChange, onClick) {
     if (delta < -Math.PI) delta += TAU
     last = a
     moved += Math.abs(delta) * radiusOf(svgEl, event)
+    if (sweep) {
+      // Summing the steps lets the arc go either way round and past half a circle.
+      sweep.turned = Math.max(-TAU, Math.min(TAU, sweep.turned + delta))
+      const start = sweep.from * TAU
+      const { inner, outer } = getRadii()
+      const box = svgEl.getBoundingClientRect()
+      highlight.show('path', {
+        d: arcPath(start + Math.min(0, sweep.turned), start + Math.max(0, sweep.turned), TAU, inner, outer),
+        transform: `translate(${box.width / 2},${box.height / 2})`,
+      })
+      return
+    }
     if (moved > 4) onChange(panBy(genome, -(delta / TAU) * genome.view.span))
   })
 
   svgEl.addEventListener('pointerup', (event) => {
     if (last !== null && moved <= 4 && onClick) onClick(event)
+    else if (sweep && getGenome() && moved > 4 && sweep.turned) onChange(zoomToFracs(getGenome(), sweep.from, sweep.from + sweep.turned / TAU))
+    if (sweep) highlight.clear()
+    sweep = null
     last = null
   })
+
+  svgEl.addEventListener('pointercancel', () => { highlight?.clear(); sweep = null; last = null })
 
   svgEl.addEventListener('dblclick', (event) => {
     const genome = getGenome()

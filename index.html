@@ -64,7 +64,14 @@
     #help[hidden] { display: none; }
     #help h2 { margin: 0 0 6px; font-size: 14px; }
     #feature-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; max-width: 90%; line-height: 1.8; }
+    #feature-dialog { width: 460px; }
     #feature-dialog a { color: var(--accent); }
+    #feature-form { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+    #feature-form textarea, #feature-form input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; }
+    #feature-form textarea { resize: vertical; }
+    #feature-form small { color: var(--muted); line-height: 1.4; }
+    #feature-form button { align-self: flex-end; }
+    #feature-form .trap { position: absolute; left: -9999px; }
     #pick-dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; max-width: 90%; }
     #pick-dialog[open] { display: flex; flex-direction: column; gap: 6px; }
     #pick-dialog button { text-align: left; }
@@ -103,13 +110,14 @@
   <main>
     <div id="canvas-area">
       <div id="error-banner"></div>
-      <div id="scroller"><svg id="canvas"><g id="viewport"></g><g id="overlay" pointer-events="none"></g></svg></div>
+      <div id="scroller"><svg id="canvas"><g id="viewport"></g><g id="overlay" pointer-events="none"></g><g id="selection" pointer-events="none"></g></svg></div>
       <div id="empty">Drop bigWig (.bw) and annotation (.bed / .gtf / .gff) files here<br />Plus/minus strand pairs (<code>x.plus.bw</code> + <code>x.minus.bw</code>) merge automatically</div>
       <div id="tooltip"></div>
       <div id="help" hidden>
         <h2>Help &amp; about <button id="help-close" style="float:right">×</button></h2>
         <b>Mouse</b><br />
         scroll: zoom at cursor (over the track names: scroll the tracks, when they don't all fit) · drag: pan (rotate in circular view)<br />
+        <kbd>Shift</kbd>+drag: highlight a region and zoom to it (<kbd>Esc</kbd> cancels)<br />
         double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it<br />
         <b>Keyboard</b><br />
         <kbd>/</kbd> search · <kbd>R</kbd> reset view · <kbd>V</kbd> circular / linear · <kbd>?</kbd> this panel · <kbd>Esc</kbd> close<br />
@@ -153,15 +161,22 @@
         </div>
       </div>
       <div id="track-list"></div>
-      <p class="hint">Scroll: zoom at cursor · drag: rotate · double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it · <kbd>R</kbd>: reset · <kbd>?</kbd>: shortcuts</p>
+      <p class="hint">Scroll: zoom at cursor · drag: rotate or pan · <kbd>Shift</kbd>+drag: zoom to region · double-click: zoom in (<kbd>Shift</kbd> out) · click a feature: zoom to it · <kbd>R</kbd>: reset · <kbd>?</kbd>: shortcuts</p>
     </aside>
   </main>
   <script type="module" src="src/app.js"></script>
   <dialog id="pick-dialog"></dialog>
   <dialog id="feature-dialog">
-    Email your feature request to <b style="user-select: all">orbitgenomeviewer@gmail.com</b><br />
-    Tell us what you would like OrbiT to do and what you would use it for.<br />
-    <a href="mailto:orbitgenomeviewer@gmail.com?subject=OrbiT%20feature%20request&amp;body=What%20would%20you%20like%20OrbiT%20to%20do%3F%0D%0A%0D%0A%0D%0AWhat%20would%20you%20use%20it%20for%3F%0D%0A">Open in your mail app</a>
+    <b>Request a feature</b>
+    <form id="feature-form" hidden>
+      <textarea name="message" rows="6" maxlength="5000" required placeholder="What would you like OrbiT to do, and what would you use it for?" aria-label="Your request"></textarea>
+      <input name="email" type="email" maxlength="254" placeholder="Your email (optional, if you want a reply)" aria-label="Your email (optional)" />
+      <input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="trap" />
+      <small>Sends only what you type here, through Google, to the OrbiT inbox. Your data files stay on your computer.</small>
+      <button>Send</button>
+    </form>
+    <div id="feature-status" role="status"></div>
+    You can also email <b style="user-select: all">orbitgenomeviewer@gmail.com</b> (<a href="mailto:orbitgenomeviewer@gmail.com?subject=OrbiT%20feature%20request&amp;body=What%20would%20you%20like%20OrbiT%20to%20do%3F%0D%0A%0D%0A%0D%0AWhat%20would%20you%20use%20it%20for%3F%0D%0A">open in your mail app</a>).
     <form method="dialog" style="text-align: right"><button>Close</button></form>
   </dialog>
 </body>

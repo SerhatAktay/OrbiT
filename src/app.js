@@ -38,6 +38,7 @@ import { drawLinear, LEFT } from './draw-linear.js'
 import { TAU } from './render.js'
 import { attachZoomPan, attachLinearZoomPan, fracOf, radiusOf } from './interaction.js'
 import { renderTrackPanel } from './ui.js'
+import { attachFeedback } from './feedback.js'
 import { exportSvg, exportPng, exportHtml } from './export.js'
 import { captureSession, parseSession, applySessionTracks, applySessionView } from './session.js'
 
@@ -814,7 +815,7 @@ $('g-bars').addEventListener('change', toggleStyle)
 $('g-lock').addEventListener('change', (e) => (e.target.checked ? KEYS.y() : KEYS.Y()))
 $('g-ydown').addEventListener('click', KEYS['['])
 $('g-yup').addEventListener('click', KEYS[']'])
-$('feature-btn').addEventListener('click', () => $('feature-dialog').showModal())
+attachFeedback($('feature-btn'), $('feature-dialog'))
 $('help-btn').addEventListener('click', () => { helpEl.hidden = !helpEl.hidden })
 $('help-close').addEventListener('click', () => { helpEl.hidden = true })
 new ResizeObserver(requestRender).observe(canvasArea)
@@ -841,8 +842,8 @@ showTheme(document.documentElement.dataset.theme)
 // Each attach is active only in its own mode (getGenome returns null otherwise).
 // The full linear view has no rotation, so it always starts at bp 1.
 const setGenome = (next) => { genome = mode === 'linear' && isFullView(next) ? resetView(next) : next; requestRender() }
-attachZoomPan(svg, () => (mode === 'circular' ? genome : null), setGenome, onSvgClick)
-attachLinearZoomPan(svg, () => (mode === 'linear' ? genome : null), () => scene?.plot, setGenome, onSvgClick, () => ySettings.bars)
+attachZoomPan(svg, () => (mode === 'circular' ? genome : null), setGenome, onSvgClick, $('selection'), () => scene && { inner: scene.minRadius, outer: scene.rulerR })
+attachLinearZoomPan(svg, () => (mode === 'linear' ? genome : null), () => scene?.plot, setGenome, onSvgClick, () => ySettings.bars, $('selection'))
 rebuildPanel()
 
 // Test/debug hook.

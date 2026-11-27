@@ -61,6 +61,7 @@ Small test files (`chrM.plus.bw`, `chrM.minus.bw`, `sample.bed`) are in [`test/f
 | --- | --- |
 | Scroll | zoom at cursor. If the tracks don't all fit, scroll over the track names (or use the scrollbar) to see the rest |
 | Drag | rotate (circular) or pan (linear) |
+| Shift + drag | highlight a region and zoom to it (`Esc` cancels) |
 | Double-click (Shift) | zoom in (out) |
 | Click a feature | zoom to it |
 | Hover | position, feature, or signal value |
@@ -120,6 +121,6 @@ GitHub's "Cite this repository" button uses `CITATION.cff`.
 
 ## Feedback
 
-To request a feature, use the **Request a feature** header button or email <orbitgenomeviewer@gmail.com>.
+To request a feature, use the **Request a feature** header button or email <orbitgenomeviewer@gmail.com>. The form sends only what you type, through a Google Apps Script (`scripts/feature-request.gs`), deployed at the `FEEDBACK_URL` in `src/feedback.js`.
 
 When something looks wrong, a screenshot plus the file type and approximate window (for example `chrM 7,900–8,100`) helps most.
